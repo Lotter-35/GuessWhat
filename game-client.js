@@ -241,7 +241,6 @@ socket.on('game:roundEnd', (data) => {
   // Points si on a gagné
   if (myWin && data.points) {
     totalScore += data.points;
-    updateScore(totalScore);
 
     const popup       = document.getElementById('points-popup');
     popup.textContent = `+${data.points}`;
@@ -323,12 +322,10 @@ function showCanvasMessage(msg, color = '#e8e8f0') {
   ctx.fillText(msg, W / 2, H / 2);
 }
 
-function updateRoundInfo(roundNum) {
-  document.getElementById('round-num').textContent = `MANCHE ${roundNum}`;
-}
+function updateRoundInfo() {}
 
 function updateScore(val) {
-  document.getElementById('score-display').textContent = val;
+  totalScore = val;
 }
 
 function updatePixelInfo(stepIdx) {

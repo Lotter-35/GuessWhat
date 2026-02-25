@@ -78,7 +78,7 @@ body::before {
 header {
   flex-shrink: 0;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--border);
