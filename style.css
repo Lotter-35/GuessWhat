@@ -80,7 +80,7 @@ header {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 14px 16px 12px;
+  padding: 14px 16px 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -134,7 +134,7 @@ header {
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--border);
-  padding: 10px 14px;
+  padding: 10px 14px 12px;
   gap: 8px;
 }
 
@@ -326,6 +326,34 @@ header {
   gap: 5px;
   padding: 8px 14px 10px;
   background: var(--bg);
+}
+
+/* ── BLOC INDICE ── */
+.hint-block {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.hint-block__value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  color: var(--gold);
+  border: 1.5px solid var(--gold);
+  border-radius: 999px;
+  padding: 2px 12px;
+  box-shadow: 0 0 8px rgba(255,215,0,0.2);
+}
+
+@keyframes hint-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hint-block--reveal {
+  animation: hint-reveal 0.4s ease forwards;
 }
 
 /* ── INPUT ── */
@@ -681,8 +709,8 @@ canvas {
     flex-direction: column;
     height: auto;
     min-height: 100dvh;
-    /* Espace sous le contenu pour ne pas être caché par la bottom-bar fixe */
-    padding-bottom: 58px;
+    /* Espace sous le contenu pour ne pas être caché par la bottom-bar fixe (input + hint-bar) */
+    padding-bottom: 82px;
   }
 
   /* Affiche le logo en haut, masque celui du panneau */
@@ -796,6 +824,18 @@ canvas {
     padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px));
     gap: 4px;
     border-top: 1px solid var(--border);
+  }
+
+  .hint-block {
+    position: fixed;
+    bottom: 46px; /* hauteur approximative de la bottom-bar — ajusté dynamiquement par JS */
+    left: 0;
+    right: 0;
+    z-index: 199;
+    padding: 5px 10px;
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--bg);
   }
 
   .login-logo {

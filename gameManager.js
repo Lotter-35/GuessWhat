@@ -1,10 +1,11 @@
 'use strict';
 
-const sharp     = require('sharp');
-const fetch     = require('node-fetch');
+const sharp                  = require('sharp');
+const fetch                  = require('node-fetch');
+const { loadAllRounds }      = require('./sources');
 
 // ─────────────────────────────────────────────
-// MANCHES DE SECOURS (si les APIs échouent)
+// MANCHES DE SECOURS (utilisées si toutes les sources échouent)
 // ─────────────────────────────────────────────
 const FALLBACK_ROUNDS = [
   {
@@ -16,128 +17,8 @@ const FALLBACK_ROUNDS = [
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Rook-Corvus_frugilegus.jpg',
     answers:  ['corbeau', 'corbeaux', 'rook', 'corvus', 'freux', 'corneille'],
     hints:    ['oiseau', 'noir', 'passereau']
-  },
-  {
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/3/34/Anser_anser_1_%28Piotr_Kuczynski%29.jpg',
-    answers:  ['oie', 'oies', 'goose', 'anser', 'bernache'],
-    hints:    ['oiseau', 'palmipède', 'volatile']
-  },
-  {
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/LutraCanadensis_fullres.jpg/1280px-LutraCanadensis_fullres.jpg',
-    answers:  ['loutre', 'loutres', 'otter', 'lutra'],
-    hints:    ['mammifère', 'aquatique', 'fourrure']
   }
 ];
-
-// ─────────────────────────────────────────────
-// CHARGEMENT DYNAMIQUE DES MANCHES DEPUIS LES APIs
-// ─────────────────────────────────────────────
-
-/** Supprime les doublons dans un tableau (comparaison stricte). */
-function uniqueArr(arr) {
-  return arr.filter((v, i, a) => a.indexOf(v) === i);
-}
-
-/** Mélange un tableau en place (Fisher-Yates). */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-/**
- * Charge les manches depuis :
- *  - sampleapis.com  → films avec poster Amazon
- *  - PokéAPI         → 151 Pokémon Gen-1 avec artwork officiel
- */
-async function loadRoundsFromAPIs() {
-  const rounds = [];
-
-  // ── 1. Films ──────────────────────────────────────────────────────────────
-  const MOVIE_CATS = ['comedy', 'animation', 'adventure'];
-
-  await Promise.all(MOVIE_CATS.map(async cat => {
-    try {
-      const resp = await fetch(`https://api.sampleapis.com/movies/${cat}`, {
-        headers: { Accept: 'application/json' }
-      });
-      if (!resp.ok) return;
-      const movies = await resp.json();
-      if (!Array.isArray(movies)) return;
-
-      for (const m of movies) {
-        if (!m.posterURL || m.posterURL === 'N/A') continue;
-        const title = (m.title || '').trim();
-        if (!title) continue;
-
-        // Proposer le titre complet ET une version sans ponctuation complexe
-        const titleSimple = title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
-        const answers = uniqueArr([title, titleSimple].filter(Boolean));
-
-        rounds.push({
-          imageUrl: m.posterURL,
-          answers,
-          hints: ['film', 'cinéma', cat]
-        });
-      }
-      console.log(`[API] movies/${cat} : ${movies.filter(m => m.posterURL && m.posterURL !== 'N/A').length} films chargés`);
-    } catch (e) {
-      console.error(`[API] movies/${cat} erreur :`, e.message);
-    }
-  }));
-
-  // ── 2. Pokémon Génération 1 (ids 1-151) ───────────────────────────────────
-  const POKE_COUNT  = 151;
-  const BATCH_SIZE  = 15;
-
-  for (let start = 1; start <= POKE_COUNT; start += BATCH_SIZE) {
-    const end = Math.min(start + BATCH_SIZE - 1, POKE_COUNT);
-    const ids  = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-
-    await Promise.all(ids.map(async id => {
-      try {
-        const [poke, species] = await Promise.all([
-          fetch(`https://pokeapi.co/api/v2/pokemon/${id}`).then(r => r.json()),
-          fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`).then(r => r.json())
-        ]);
-
-        const img = poke.sprites?.other?.['official-artwork']?.front_default;
-        if (!img) return;
-
-        const nameFr    = species.names.find(n => n.language.name === 'fr')?.name   || '';
-        const nameEnRaw = poke.name; // ex: "bulbasaur"
-        const nameEn    = nameEnRaw.charAt(0).toUpperCase() + nameEnRaw.slice(1);
-
-        // Construire la liste de réponses acceptées
-        const answers = uniqueArr([
-          nameFr,
-          nameFr.toLowerCase(),
-          nameEn,
-          nameEnRaw
-        ].filter(Boolean));
-
-        const types = poke.types.map(t => t.type.name);
-
-        rounds.push({
-          imageUrl: img,
-          answers,
-          hints: ['pokémon', ...types]
-        });
-      } catch (e) {
-        console.error(`[API] Pokémon #${id} erreur :`, e.message);
-      }
-    }));
-  }
-  console.log(`[API] Pokémon : ${rounds.filter(r => r.hints[0] === 'pokémon').length} chargés`);
-
-  // ── 3. Mélange final ──────────────────────────────────────────────────────
-  shuffle(rounds);
-
-  console.log(`[API] Total manches disponibles : ${rounds.length}`);
-  return rounds.length > 0 ? rounds : FALLBACK_ROUNDS;
-}
 
 // ─────────────────────────────────────────────
 // PARAMÈTRES DE PIXELISATION
@@ -148,7 +29,8 @@ const SCHEDULE = [
   { res:  16, duration:  9 },
   { res:  32, duration: 11 },
   { res:  64, duration: 13 },
-  { res: 128, duration: 15 },
+  { res: 128, duration: 14 },
+  { res: 256, duration: 5 },
 ];
 
 const SHIMMER_INTERVAL   = 150;   // ms entre deux calculs de shimmer
@@ -189,6 +71,7 @@ class GameManager {
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
+    this._hintTimer    = null;
   }
 
   // ── Joueurs ─────────────────────────────────
@@ -201,8 +84,16 @@ class GameManager {
     this.players.delete(socketId);
     const hadVoted = this._skipVotes.delete(socketId);
     this._broadcastPlayers();
+
+    // Plus personne dans le lobby → on laisse la manche se terminer normalement,
+    // le compteur sera réinitialisé dans _scheduleNextRound
+    if (this.players.size === 0) {
+      console.log('[GAME] Lobby vide — la manche en cours se termine, puis suspendue.');
+      return;
+    }
+
     // Réévaluer le skip si ce joueur avait voté (le seuil change avec 1 joueur en moins)
-    if (hadVoted && !this.roundSolved && this.players.size > 0) {
+    if (hadVoted && !this.roundSolved) {
       const count  = this.players.size;
       const needed = Math.floor(count / 2) + 1;
       if (this._skipVotes.size >= needed) {
@@ -311,12 +202,16 @@ class GameManager {
   }
 
   // ── Manche ──────────────────────────────────
-  async startRound(roundIndex) {
-    this.currentRound = roundIndex;
-    this.currentStep  = 0;
-    this.roundSolved  = false;
-    this.roundWinner  = null;
-    this._skipVotes   = new Set();
+  // attempt : nombre d'essais successifs pour cette manche (évite boucle infinie)
+  async startRound(roundIndex, attempt = 0) {
+    const MAX_SKIP = Math.min(10, this._rounds.length - 1);
+
+    this.currentRound  = roundIndex;
+    this.currentStep   = 0;
+    this.roundSolved   = false;
+    this.roundWinner   = null;
+    this._skipVotes    = new Set();
+    this._hintRevealed = null;
     this._clearTimers();
 
     const round = this._rounds[this.currentRound];
@@ -326,8 +221,17 @@ class GameManager {
     try {
       await this._loadImage(round.imageUrl);
     } catch (e) {
-      console.error('[IMG] Erreur de chargement :', e.message);
-      // Crée une grille de fallback (gris uni)
+      console.error(`[IMG] Erreur de chargement (essai ${attempt + 1}/${MAX_SKIP + 1}) :`, e.message);
+
+      if (attempt < MAX_SKIP) {
+        // Passe silencieusement à l'entrée suivante
+        const next = (roundIndex + 1) % this._rounds.length;
+        console.log(`[IMG] Image ignorée → passage à l'entrée ${next + 1}`);
+        return this.startRound(next, attempt + 1);
+      }
+
+      // Toutes les tentatives épuisées → on lance quand même avec une grille grise
+      console.error('[IMG] Impossible de charger une image valide après plusieurs essais. Grille de secours utilisée.');
       this.nativeW = 256; this.nativeH = 256; this.channels = 3;
       this.nativePixels = Buffer.alloc(256 * 256 * 3, 80);
     }
@@ -339,6 +243,18 @@ class GameManager {
     });
 
     this._runStep(0);
+
+    // Révèle l'indice de source à tous les joueurs après 10s
+    const _hint = round.hints?.[0];
+    if (_hint) {
+      this._hintTimer = setTimeout(() => {
+        if (!this.roundSolved) {
+          console.log(`[GAME] Indice révélé : ${_hint}`);
+          this._hintRevealed = _hint;
+          this.io.emit('game:hint', { hint: _hint });
+        }
+      }, 10000);
+    }
   }
 
   _runStep(stepIndex) {
@@ -478,6 +394,14 @@ class GameManager {
 
   _scheduleNextRound(delay) {
     this._nextTimer = setTimeout(async () => {
+      // Ne lance pas de nouvelle manche si le lobby est vide
+      if (this.players.size === 0) {
+        console.log('[GAME] Manche annulée — lobby vide. Compteur réinitialisé.');
+        this.started      = false;
+        this.roundNumber  = 1;
+        this.currentRound = 0;
+        return;
+      }
       // Boucle infinie sur les images
       this.currentRound = (this.currentRound + 1) % this._rounds.length;
       this.roundNumber++;
@@ -489,17 +413,20 @@ class GameManager {
     clearTimeout(this._stepTimer);
     clearInterval(this._shimmerTimer);
     clearTimeout(this._nextTimer);
+    clearTimeout(this._hintTimer);
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
+    this._hintTimer    = null;
   }
 
   // Démarre dès le lancement du serveur, sans attendre de joueurs
   async start() {
     if (this.started) return;
     this.started = true;
-    console.log('[API] Chargement des manches depuis les APIs...');
-    this._rounds = await loadRoundsFromAPIs();
+    console.log('[SOURCES] Chargement des manches...');
+    const loaded = await loadAllRounds();
+    this._rounds = loaded.length > 0 ? loaded : FALLBACK_ROUNDS;
     this.currentRound = 0;
     await this.startRound(this.currentRound);
   }
@@ -513,6 +440,7 @@ class GameManager {
       stepStartedAt:         this._stepStartedAt,
       totalRemainingAtStart: this._totalRemainingAtStart,
       skipIds:               Array.from(this._skipVotes),
+      hintRevealed:          this._hintRevealed,
       players:      Array.from(this.players.entries()).map(([id, p]) => ({
         id, pseudo: p.pseudo, score: p.score
       })),

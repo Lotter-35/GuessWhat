@@ -69,6 +69,29 @@ document.getElementById('pseudo-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') joinGame();
 });
 
+// Helper : affiche ou masque le bloc d'indice
+function showHint(text) {
+  const block = document.getElementById('hint-block');
+  const val   = document.getElementById('hint-bar-value');
+  if (!block || !val) return;
+  if (text) {
+    val.textContent = text.toUpperCase();
+    block.style.display = 'flex';
+    block.classList.remove('hint-block--reveal');
+    void block.offsetWidth;
+    block.classList.add('hint-block--reveal');
+    // Recale la position par rapport à la bottom-bar (surtout sur iOS)
+    const bar = document.querySelector('.bottom-bar');
+    if (bar && window.innerWidth <= 639) {
+      const barBottom = parseInt(bar.style.bottom || '0', 10) || 0;
+      block.style.bottom = (barBottom + bar.offsetHeight) + 'px';
+    }
+  } else {
+    block.style.display = 'none';
+    val.textContent = '';
+  }
+}
+
 // ─────────────────────────────────────────────
 // ÉVÉNEMENT : SYNCHRONISATION INITIALE
 // ─────────────────────────────────────────────
@@ -89,6 +112,9 @@ socket.on('game:sync', (state) => {
   updateRoundInfo(currentRound);
   updatePixelInfo(currentStep);
   renderPlayerList(state.players || []);
+
+  // Indice déjà révélé avant la connexion
+  showHint(state.hintRevealed || null);
 
   // Timer late-joiner : recalcule la position correcte dans les ~60s
   if (state.started && !state.roundSolved && state.stepStartedAt && state.totalRemainingAtStart > 0) {
@@ -182,6 +208,9 @@ socket.on('game:roundStart', (data) => {
   input.className = 'guess-input';
   input.focus();
 
+  // Masque l'indice au début de chaque manche (révélé après 30s via game:hint)
+  showHint(null);
+
   document.getElementById('canvas-container').className  = 'canvas-container';
   document.getElementById('feedback-overlay').className  = 'feedback-overlay';
   document.querySelector('.timer-wrap').style.visibility = 'visible';
@@ -208,6 +237,13 @@ socket.on('game:roundStart', (data) => {
     updateTimerUI(_fr);
     if (_el >= _totalRndMs) clearInterval(stepTimerInterval);
   }, 100);
+});
+
+// ─────────────────────────────────────────────
+// ÉVÉNEMENT : INDICE (révélé après 30s)
+// ─────────────────────────────────────────────
+socket.on('game:hint', (data) => {
+  showHint(data.hint || null);
 });
 
 // ─────────────────────────────────────────────
@@ -460,7 +496,8 @@ function addAnswerToHistory(answer, won, winner) {
 (function iosKeyboardFix() {
   if (!window.visualViewport) return;
 
-  const getBar = () => document.querySelector('.bottom-bar');
+  const getBar   = () => document.querySelector('.bottom-bar');
+  const getHint  = () => document.querySelector('.hint-block');
 
   const update = () => {
     const bar = getBar();
@@ -468,6 +505,8 @@ function addAnswerToHistory(answer, won, winner) {
     // Seulement sur mobile (position:fixed appliqué par le CSS media query)
     if (window.innerWidth > 639) {
       bar.style.bottom = '';
+      const hint = getHint();
+      if (hint) hint.style.bottom = '';
       return;
     }
     // Décalage entre le bas de innerHeight et le bas du viewport visible
@@ -475,7 +514,11 @@ function addAnswerToHistory(answer, won, winner) {
       window.innerHeight -
       window.visualViewport.offsetTop -
       window.visualViewport.height;
-    bar.style.bottom = Math.max(0, offsetFromBottom) + 'px';
+    const barBottom = Math.max(0, offsetFromBottom);
+    bar.style.bottom = barBottom + 'px';
+    // Hint-block collé juste au-dessus de la bottom-bar
+    const hint = getHint();
+    if (hint) hint.style.bottom = (barBottom + bar.offsetHeight) + 'px';
   };
 
   window.visualViewport.addEventListener('resize', update);
