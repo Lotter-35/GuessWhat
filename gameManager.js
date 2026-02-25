@@ -88,7 +88,7 @@ class GameManager {
     // Plus personne dans le lobby → on laisse la manche se terminer normalement,
     // le compteur sera réinitialisé dans _scheduleNextRound
     if (this.players.size === 0) {
-      console.log('[GAME] Lobby vide — la manche en cours se termine, puis suspendue.');
+      console.log('[GAME] No players — waiting for round to end.');
       return;
     }
 
@@ -345,10 +345,10 @@ class GameManager {
 
     const round = this._rounds[this.currentRound];
 
-    // Calcul du score
-    const basePoints = 500;
-    const stepBonus  = (SCHEDULE.length - 1 - this.currentStep - 1) * 100;
-    const points     = Math.max(100, basePoints + stepBonus);
+    // Calcul du score : 100 pts au step 0 (très tôt) → 10 pts au dernier step
+    const maxPts = 100;
+    const minPts = 10;
+    const points = Math.round(maxPts - this.currentStep * (maxPts - minPts) / (SCHEDULE.length - 1));
 
     player.score += points;
     this.players.set(socketId, player);
@@ -396,7 +396,7 @@ class GameManager {
     this._nextTimer = setTimeout(async () => {
       // Ne lance pas de nouvelle manche si le lobby est vide
       if (this.players.size === 0) {
-        console.log('[GAME] Manche annulée — lobby vide. Compteur réinitialisé.');
+        console.log('[GAME] No players — game paused, counters reset.');
         this.started      = false;
         this.roundNumber  = 1;
         this.currentRound = 0;
