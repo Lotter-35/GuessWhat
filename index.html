@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIXELIZ — Devine l'image</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════
+       ÉCRAN DE LOGIN
+  ══════════════════════════════════════════ -->
+  <div id="login-screen">
+    <div class="login-box">
+      <div class="login-logo">PIXEL<span>IZ</span></div>
+      <p class="login-desc">
+        L'IMAGE SE DÉVOILE PEU À PEU.<br>
+        TROUVE LE MOT AVANT LES AUTRES.
+      </p>
+      <div class="login-form">
+        <input
+          id="pseudo-input"
+          type="text"
+          placeholder="TON PSEUDO…"
+          maxlength="20"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn-login" onclick="joinGame()">REJOINDRE →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       JEU PRINCIPAL
+  ══════════════════════════════════════════ -->
+  <div id="app" style="display:none">
+
+    <!-- ── GAUCHE : CANVAS ── -->
+    <div class="canvas-side">
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="game-canvas" width="520" height="520"></canvas>
+        <div class="feedback-overlay" id="feedback-overlay"></div>
+        <div class="points-popup" id="points-popup">+500</div>
+        <div class="timer-wrap">
+          <svg width="48" height="48" viewBox="0 0 48 48">
+            <circle class="timer-circle-bg" cx="24" cy="24" r="20"/>
+            <circle class="timer-circle" id="timer-circle" cx="24" cy="24" r="20"/>
+          </svg>
+          <div class="timer-text" id="timer-text">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DROITE : PANNEAU ── -->
+    <div class="panel-side">
+
+      <header>
+        <div class="logo">PIXEL<span>IZ</span></div>
+        <div class="header-right">
+          <div class="round-badge" id="round-num">—</div>
+          <div class="my-score">
+            <span class="my-score-label">SCORE</span>
+            <span class="score-val" id="score-display">0</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scoreboard -->
+      <div class="panel-block">
+        <div class="panel-block-label">SCOREBOARD</div>
+        <div id="player-list" class="player-list"></div>
+      </div>
+
+      <!-- Chatbox -->
+      <div class="panel-block chatbox-block">
+        <div class="panel-block-label">CHAT</div>
+        <div class="guess-history" id="guess-history"></div>
+      </div>
+
+      <!-- Barre basse -->
+      <div class="bottom-bar">
+        <button class="btn-next" id="btn-next" style="display:none">SUIVANT →</button>
+        <div class="input-area">
+          <input
+            type="text"
+            class="guess-input"
+            id="guess-input"
+            placeholder="Entrée réponse…"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+          <button class="btn-submit" onclick="submitGuess()">OK</button>
+        </div>
+      </div>
+
+    </div><!-- /.panel-side -->
+
+  </div><!-- /#app -->
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game-client.js"></script>
+</body>
+</html>
