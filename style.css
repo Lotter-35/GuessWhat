@@ -333,11 +333,13 @@ header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 6px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
-.hint-block__value {
+.hint-block__pill {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 0.7rem;
   letter-spacing: 2px;
@@ -346,15 +348,14 @@ header {
   border-radius: 999px;
   padding: 2px 12px;
   box-shadow: 0 0 8px rgba(255,215,0,0.2);
+  animation: hint-pill-in 0.35s ease forwards;
 }
 
-@keyframes hint-reveal {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes hint-pill-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-.hint-block--reveal {
-  animation: hint-reveal 0.4s ease forwards;
-}
+.hint-block--reveal { /* retro-compat */ }
 
 /* ── INPUT ── */
 .input-area {
@@ -459,6 +460,48 @@ header {
 .btn-next:hover {
   background: rgba(0,229,255,0.08);
   box-shadow: 0 0 16px rgba(0,229,255,0.2);
+}
+
+/* ── BOUTON SOURCE (host seulement) ── */
+.btn-source-toggle {
+  position: fixed;
+  bottom: 14px;
+  left: 14px;
+  z-index: 200;
+  display: none;           /* affiché via JS uniquement pour le host */
+  align-items: center;
+  gap: 5px;
+  background: rgba(10,10,15,0.80);
+  border: 1px solid var(--dim);
+  border-radius: 6px;
+  color: var(--dim);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 5px 10px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.btn-source-toggle:hover {
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+.btn-source-toggle.active {
+  background: rgba(0,229,255,0.12);
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
+/* ── MESSAGE SYSTÈME DANS LE CHAT ── */
+.chat-system-msg {
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  padding: 4px 0;
+  opacity: 0.8;
 }
 
 /* ── CANVAS ── */

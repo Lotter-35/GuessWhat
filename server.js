@@ -1,10 +1,14 @@
 'use strict';
 
+// Charge .env en développement local (ignoré si la variable est déjà définie par Railway)
+require('dotenv').config();
+
 const express     = require('express');
 const http        = require('http');
 const { Server }  = require('socket.io');
 const path        = require('path');
 const GameManager = require('./gameManager');
+const { router: adminRouter, ADMIN_PASSWORD } = require('./admin/api');
 
 const PORT = process.env.PORT || 5454;
 
@@ -16,6 +20,13 @@ const server = http.createServer(app);
 
 // Sert index.html, style.css, game-client.js depuis la racine du projet
 app.use(express.static(path.join(__dirname)));
+
+// ── Routes Admin ──────────────────────────────────────
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+});
+app.use('/admin/api', adminRouter);
+
 
 // Tous les autres routes → index.html (SPA)
 app.get('*', (req, res) => {
@@ -71,7 +82,13 @@ io.on('connection', (socket) => {
   socket.on('player:skip', () => {
     game.handleSkip(socket.id);
   });
-
+  // ── Changement de source (host seulement) ────────
+  socket.on('game:setSourceMode', (mode) => {
+    if (typeof mode !== 'string') return;
+    game.setSourceMode(socket.id, mode).catch(err =>
+      console.error('[GAME] setSourceMode erreur :', err.message)
+    );
+  });
   // ── Déconnexion ──────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[SOCKET] Déconnexion : ${socket.id}`);

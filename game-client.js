@@ -30,6 +30,8 @@ let roundEndImg    = null;
 let stepTimerInterval = null;  // timer local pour le cercle
 let currentPlayers    = [];    // liste joueurs courante (pour re-render au skip)
 let skipVotedIds      = new Set(); // IDs ayant voté skip cette manche
+let isHost            = false;     // vrai uniquement pour le premier joueur
+let sourceMode        = 'api';     // 'api' | 'db'
 // CONNEXION SOCKET.IO
 // ─────────────────────────────────────────────
 const socket = io();
@@ -69,26 +71,51 @@ document.getElementById('pseudo-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') joinGame();
 });
 
-// Helper : affiche ou masque le bloc d'indice
-function showHint(text) {
+// Indices révélés dans la manche courante (côté client)
+let hintsRevealedClient = [];
+
+// Helper : crée une pill par indice dans #hint-block
+// hintsArg: null | string | string[]
+// newIndex : index du dernier indice ajouté (animé), -1 = tous affichés sans anim
+function showHint(hintsArg, newIndex = -1) {
   const block = document.getElementById('hint-block');
-  const val   = document.getElementById('hint-bar-value');
-  if (!block || !val) return;
-  if (text) {
-    val.textContent = text.toUpperCase();
-    block.style.display = 'flex';
-    block.classList.remove('hint-block--reveal');
-    void block.offsetWidth;
-    block.classList.add('hint-block--reveal');
-    // Recale la position par rapport à la bottom-bar (surtout sur iOS)
-    const bar = document.querySelector('.bottom-bar');
-    if (bar && window.innerWidth <= 639) {
-      const barBottom = parseInt(bar.style.bottom || '0', 10) || 0;
-      block.style.bottom = (barBottom + bar.offsetHeight) + 'px';
-    }
+  if (!block) return;
+
+  // Normalise en tableau
+  let list;
+  if (!hintsArg || (Array.isArray(hintsArg) && hintsArg.length === 0)) {
+    list = [];
+  } else if (Array.isArray(hintsArg)) {
+    list = hintsArg;
   } else {
+    list = [hintsArg];
+  }
+
+  if (list.length === 0) {
     block.style.display = 'none';
-    val.textContent = '';
+    block.innerHTML = '';
+    return;
+  }
+
+  block.style.display = 'flex';
+
+  // Ne recréer que les pills manquantes (evite de ré-animer les existantes)
+  const existing = block.querySelectorAll('.hint-block__pill').length;
+  list.forEach((hint, i) => {
+    if (i < existing) return; // déjà affichée
+    const pill = document.createElement('span');
+    pill.className = 'hint-block__pill';
+    pill.textContent = hint.toUpperCase();
+    // Pas d'animation si on affiche toutes d'un coup (reconnexion)
+    if (newIndex === -1) pill.style.animation = 'none';
+    block.appendChild(pill);
+  });
+
+  // Recale la position par rapport à la bottom-bar (iOS)
+  const bar = document.querySelector('.bottom-bar');
+  if (bar && window.innerWidth <= 639) {
+    const barBottom = parseInt(bar.style.bottom || '0', 10) || 0;
+    block.style.bottom = (barBottom + bar.offsetHeight) + 'px';
   }
 }
 
@@ -100,6 +127,9 @@ socket.on('game:sync', (state) => {
   currentRound = state.roundNumber || 1;
   currentStep  = state.currentStep;
   roundSolved  = state.roundSolved;
+  sourceMode   = state.sourceMode || 'api';
+  isHost       = (mySocketId === state.hostId);
+  updateSourceToggleUI();
 
   // Sync des votes skip déjà en cours
   skipVotedIds = new Set(state.skipIds || []);
@@ -113,8 +143,9 @@ socket.on('game:sync', (state) => {
   updatePixelInfo(currentStep);
   renderPlayerList(state.players || []);
 
-  // Indice déjà révélé avant la connexion
-  showHint(state.hintRevealed || null);
+  // Indices déjà révélés avant la connexion
+  hintsRevealedClient = state.hintsRevealed || [];
+  showHint(hintsRevealedClient, -1); // -1 = pas d'animation (déjà révélés)
 
   // Timer late-joiner : recalcule la position correcte dans les ~60s
   if (state.started && !state.roundSolved && state.stepStartedAt && state.totalRemainingAtStart > 0) {
@@ -208,8 +239,9 @@ socket.on('game:roundStart', (data) => {
   input.className = 'guess-input';
   input.focus();
 
-  // Masque l'indice au début de chaque manche (révélé après 30s via game:hint)
-  showHint(null);
+  // Masque les indices au début de chaque manche
+  hintsRevealedClient = [];
+  showHint([], -1);
 
   document.getElementById('canvas-container').className  = 'canvas-container';
   document.getElementById('feedback-overlay').className  = 'feedback-overlay';
@@ -240,10 +272,12 @@ socket.on('game:roundStart', (data) => {
 });
 
 // ─────────────────────────────────────────────
-// ÉVÉNEMENT : INDICE (révélé après 30s)
+// ÉVÉNEMENT : INDICE (révélé progressivement)
 // ─────────────────────────────────────────────
 socket.on('game:hint', (data) => {
-  showHint(data.hint || null);
+  hintsRevealedClient = data.hintsRevealed || (data.hint ? [data.hint] : []);
+  // newIndex = indice du dernier élément ajouté (seul lui sera animé)
+  showHint(hintsRevealedClient, hintsRevealedClient.length - 1);
 });
 
 // ─────────────────────────────────────────────
@@ -352,6 +386,50 @@ socket.on('players:update', (players) => {
 // FIN DE PARTIE → plus utilisé (boucle infinie) - conservé précaution
 // ─────────────────────────────────────────────
 socket.on('game:over', () => { /* partie infinie, ne se déclenche plus */ });
+
+// ─────────────────────────────────────────────
+// SOURCE MODE — rôle hôte & toggle
+// ─────────────────────────────────────────────
+// Le serveur nous informe si on devient hôte (quand l'ancien part)
+socket.on('game:roleChanged', (data) => {
+  isHost     = data.isHost;
+  sourceMode = data.sourceMode || sourceMode;
+  updateSourceToggleUI();
+});
+
+// Quelqu'un (le host) a changé la source — tout le monde est informé
+socket.on('game:sourceModeChanged', (data) => {
+  sourceMode = data.sourceMode;
+  updateSourceToggleUI();
+});
+
+function updateSourceToggleUI() {
+  const btn = document.getElementById('btn-source-toggle');
+  if (!btn) return;
+  btn.style.display = isHost ? 'flex' : 'none';
+  if (sourceMode === 'db') {
+    btn.classList.add('active');
+    btn.innerHTML = '📦 BDD';
+    btn.title = 'Source : base de données — Cliquer pour passer aux APIs';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '🌐 API';
+    btn.title = 'Source : APIs — Cliquer pour passer à la BDD';
+  }
+}
+
+function toggleSourceMode() {
+  if (!isHost) return;
+  const next = sourceMode === 'api' ? 'db' : 'api';
+  socket.emit('game:setSourceMode', next);
+}
+
+function addSystemMsg(text) {
+  const el = document.createElement('div');
+  el.className = 'chat-system-msg';
+  el.textContent = text;
+  appendToAllHistories(el);
+}
 
 // ─────────────────────────────────────────────
 // ÉVÉNEMENT : VOTES SKIP

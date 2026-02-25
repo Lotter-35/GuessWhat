@@ -2,7 +2,7 @@
 
 const sharp                  = require('sharp');
 const fetch                  = require('node-fetch');
-const { loadAllRounds }      = require('./sources');
+const { loadApiRounds, loadSupabaseRounds } = require('./sources');
 
 // ─────────────────────────────────────────────
 // MANCHES DE SECOURS (utilisées si toutes les sources échouent)
@@ -45,13 +45,15 @@ class GameManager {
   constructor(io) {
     this.io           = io;
     this.players      = new Map();   // socketId → { pseudo, score }
-    this._rounds      = FALLBACK_ROUNDS; // manches chargées dynamiquement (APIs)
+    this._rounds      = FALLBACK_ROUNDS; // manches chargées dynamiquement
     this.currentRound = 0;           // index dans this._rounds (modulo)
     this.roundNumber  = 1;           // numéro de manche affiché (incrémente à l'infini)
     this.currentStep  = 0;
     this.roundSolved  = false;
     this.roundWinner  = null;
     this.started      = false;
+    this.sourceMode   = 'api';       // 'api' | 'db' — défaut : APIs
+    this.hostId       = null;        // socketId du premier joueur (chaîte)
     this._stepStartedAt          = null;   // timestamp du début de l'étape courante
     this._totalRemainingAtStart  = 0;      // secondes restantes au début de l'étape courante
     this._skipVotes              = new Set(); // socketIds ayant voté skip
@@ -71,18 +73,35 @@ class GameManager {
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
-    this._hintTimer    = null;
+    this._hintTimers   = [];   // un timer par indice
+    this._hintsRevealed = [];  // indices révélés dans la manche courante
   }
 
   // ── Joueurs ─────────────────────────────────
   addPlayer(socketId, pseudo) {
+    const isFirst = this.players.size === 0;
     this.players.set(socketId, { pseudo, score: 0 });
+    if (isFirst) {
+      this.hostId = socketId;
+      console.log(`[GAME] Hôte : ${pseudo} (${socketId})`);
+    }
     this._broadcastPlayers();
   }
 
   removePlayer(socketId) {
     this.players.delete(socketId);
     const hadVoted = this._skipVotes.delete(socketId);
+
+    // Si l'hôte part, on assigne le suivant dans la liste
+    if (this.hostId === socketId) {
+      const next = this.players.keys().next().value || null;
+      this.hostId = next;
+      if (next) {
+        console.log(`[GAME] Nouvel hôte : ${this.players.get(next).pseudo} (${next})`);
+        this.io.to(next).emit('game:roleChanged', { isHost: true, sourceMode: this.sourceMode });
+      }
+    }
+
     this._broadcastPlayers();
 
     // Plus personne dans le lobby → on laisse la manche se terminer normalement,
@@ -210,8 +229,8 @@ class GameManager {
     this.currentStep   = 0;
     this.roundSolved   = false;
     this.roundWinner   = null;
-    this._skipVotes    = new Set();
-    this._hintRevealed = null;
+    this._skipVotes     = new Set();
+    this._hintsRevealed = [];   // indices déjà révélés dans cette manche
     this._clearTimers();
 
     const round = this._rounds[this.currentRound];
@@ -244,17 +263,18 @@ class GameManager {
 
     this._runStep(0);
 
-    // Révèle l'indice de source à tous les joueurs après 10s
-    const _hint = round.hints?.[0];
-    if (_hint) {
-      this._hintTimer = setTimeout(() => {
+    // Révèle les indices progressivement : 1er après 10s, puis +20s par indice
+    const _hints = round.hints || [];
+    this._hintTimers = _hints.map((hint, i) => {
+      const delay = 10000 + i * 20000;
+      return setTimeout(() => {
         if (!this.roundSolved) {
-          console.log(`[GAME] Indice révélé : ${_hint}`);
-          this._hintRevealed = _hint;
-          this.io.emit('game:hint', { hint: _hint });
+          console.log(`[GAME] Indice ${i + 1}/${_hints.length} révélé : ${hint}`);
+          this._hintsRevealed.push(hint);
+          this.io.emit('game:hint', { hint, hintsRevealed: [...this._hintsRevealed] });
         }
-      }, 10000);
-    }
+      }, delay);
+    });
   }
 
   _runStep(stepIndex) {
@@ -413,19 +433,43 @@ class GameManager {
     clearTimeout(this._stepTimer);
     clearInterval(this._shimmerTimer);
     clearTimeout(this._nextTimer);
-    clearTimeout(this._hintTimer);
+    this._hintTimers.forEach(t => clearTimeout(t));
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
-    this._hintTimer    = null;
+    this._hintTimers   = [];
+  }
+
+  // ── Changement de source (host seulement) ───────────────
+  async setSourceMode(socketId, mode) {
+    if (socketId !== this.hostId) return;          // seul le host peut changer
+    if (mode !== 'api' && mode !== 'db') return;
+    if (this.sourceMode === mode) return;
+
+    this.sourceMode = mode;
+    console.log(`[GAME] Mode source → ${mode}`);
+
+    // Informe tout le monde du changement
+    this.io.emit('game:sourceModeChanged', { sourceMode: mode });
+
+    // Recharge et redémarre (start() fait le chargement)
+    this._clearTimers();
+    this.started     = false;
+    this.roundNumber = 1;
+    this.currentRound = 0;
+
+    if (this.players.size > 0) {
+      await this.start();
+    }
   }
 
   // Démarre dès le lancement du serveur, sans attendre de joueurs
   async start() {
     if (this.started) return;
     this.started = true;
-    console.log('[SOURCES] Chargement des manches...');
-    const loaded = await loadAllRounds();
+    console.log(`[SOURCES] Chargement des manches (mode: ${this.sourceMode})…`);
+    const loader = this.sourceMode === 'db' ? loadSupabaseRounds : loadApiRounds;
+    const loaded = await loader().catch(() => []);
     this._rounds = loaded.length > 0 ? loaded : FALLBACK_ROUNDS;
     this.currentRound = 0;
     await this.startRound(this.currentRound);
@@ -440,7 +484,9 @@ class GameManager {
       stepStartedAt:         this._stepStartedAt,
       totalRemainingAtStart: this._totalRemainingAtStart,
       skipIds:               Array.from(this._skipVotes),
-      hintRevealed:          this._hintRevealed,
+      hintsRevealed:         this._hintsRevealed,
+      sourceMode:            this.sourceMode,
+      hostId:                this.hostId,
       players:      Array.from(this.players.entries()).map(([id, p]) => ({
         id, pseudo: p.pseudo, score: p.score
       })),

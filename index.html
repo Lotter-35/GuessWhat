@@ -90,9 +90,7 @@
       </div>
 
       <!-- Indice -->
-      <div class="hint-block" id="hint-block" style="display:none">
-        <span class="hint-block__value" id="hint-bar-value"></span>
-      </div>
+      <div class="hint-block" id="hint-block" style="display:none"></div>
 
       <!-- Barre basse -->
       <div class="bottom-bar">
@@ -119,5 +117,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="game-client.js"></script>
+
+  <button id="btn-source-toggle" class="btn-source-toggle" onclick="toggleSourceMode()" style="display:none">🌐 API</button>
 </body>
 </html>

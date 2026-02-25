@@ -11,13 +11,14 @@
  * ═══════════════════════════════════════════════════════════
  */
 
-const movies  = require('./movies');
-const pokemon = require('./pokemon');
+const movies          = require('./movies');
+const pokemon         = require('./pokemon');
+const loadSupabase    = require('./supabase');
 // ↓ Ajoute tes nouvelles sources ici ↓
 // const anime  = require('./anime');
 // const flags  = require('./flags');
 
-const SOURCES = [
+const API_SOURCES = [
   movies,
   pokemon,
   // anime,
@@ -36,21 +37,37 @@ function shuffle(arr) {
 /**
  * Charge toutes les sources en parallèle et retourne un tableau
  * fusionné et mélangé de manches.
- * Si une source échoue, elle est ignorée sans bloquer les autres.
+ * Priorité : Supabase (images personnalisées). Si Supabase contient
+ * des images, on n'utilise QUE celles-ci. Sinon, fallback sur les APIs.
  */
-async function loadAllRounds() {
+/** Charge uniquement les APIs (Pokemon, films…) */
+async function loadApiRounds() {
   const results = await Promise.all(
-    SOURCES.map(fn =>
+    API_SOURCES.map(fn =>
       fn().catch(e => {
-        console.error('[SOURCES] Erreur sur une source :', e.message);
+        console.error('[SOURCES/API] Erreur :', e.message);
         return [];
       })
     )
   );
-
   const all = results.flat();
-  console.log(`[SOURCES] Total : ${all.length} manches chargées depuis ${SOURCES.length} source(s)`);
+  console.log(`[SOURCES/API] ${all.length} manches chargées depuis ${API_SOURCES.length} source(s).`);
   return shuffle(all);
 }
 
-module.exports = { loadAllRounds };
+/** Charge uniquement la base de données Supabase */
+async function loadSupabaseRounds() {
+  const rounds = await loadSupabase().catch(e => {
+    console.error('[SOURCES/Supabase] Erreur :', e.message);
+    return [];
+  });
+  console.log(`[SOURCES/Supabase] ${rounds.length} images chargées.`);
+  return shuffle(rounds);
+}
+
+/** Compat : charge selon le mode passé en paramètre ('api' | 'db') */
+async function loadAllRounds(mode = 'api') {
+  return mode === 'db' ? loadSupabaseRounds() : loadApiRounds();
+}
+
+module.exports = { loadAllRounds, loadApiRounds, loadSupabaseRounds };

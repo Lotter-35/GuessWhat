@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GuessWhat — Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --card:      #22263a;
+      --border:    #2e3350;
+      --accent:    #6c63ff;
+      --accent2:   #4ecca3;
+      --danger:    #e05c5c;
+      --warn:      #e0a050;
+      --text:      #e8e9f0;
+      --muted:     #7a7f9a;
+      --radius:    10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── LOGIN ─────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    .login-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    .login-box h1 { font-size: 1.6rem; margin-bottom: .3rem; }
+    .login-box p  { color: var(--muted); font-size: .9rem; margin-bottom: 1.6rem; }
+    .login-box input {
+      width: 100%;
+      padding: .75rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .login-box input:focus { border-color: var(--accent); }
+    .login-box button {
+      width: 100%;
+      padding: .75rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .login-box button:hover { opacity: .85; }
+    #login-error { color: var(--danger); font-size: .85rem; margin-top: .7rem; min-height: 1.2em; }
+
+    /* ── APP ───────────────────────────────── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .9rem 1.5rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 1.2rem; }
+    header h1 span { color: var(--accent); }
+    .header-right { display: flex; gap: .7rem; align-items: center; }
+    .stat-badge {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: .25rem .8rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .stat-badge b { color: var(--text); }
+    .btn-logout {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: .3rem .8rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: .8rem;
+    }
+    .btn-logout:hover { color: var(--danger); border-color: var(--danger); }
+
+    main {
+      flex: 1;
+      padding: 1.5rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ── UPLOAD ZONE ───────────────────────── */
+    .upload-section {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      transition: border-color .2s, background .2s;
+    }
+    .upload-section.drag-over {
+      border-color: var(--accent);
+      background: #6c63ff11;
+    }
+    .upload-section h2 { font-size: 1rem; margin-bottom: 1.2rem; color: var(--accent2); }
+    .upload-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .upload-form { grid-template-columns: 1fr; }
+    }
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+    }
+    .drop-zone:hover { border-color: var(--accent); }
+    .drop-zone .icon { font-size: 2rem; }
+    .drop-zone p { font-size: .85rem; color: var(--muted); }
+    .drop-zone p b { color: var(--accent); cursor: pointer; }
+    #file-input { display: none; }
+    .drop-zone.has-files { border-color: var(--accent2); }
+    .drop-zone.has-files p b { color: var(--accent2); }
+
+    label.field-label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .4rem; }
+    textarea {
+      width: 100%;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: .6rem .8rem;
+      font-size: .85rem;
+      resize: vertical;
+      outline: none;
+      font-family: inherit;
+      min-height: 80px;
+      transition: border-color .2s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .65rem 1.2rem;
+      border-radius: var(--radius);
+      border: none;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn:hover  { opacity: .85; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent);  color: #fff; }
+    .btn-success { background: var(--accent2); color: #0f1117; }
+    .btn-danger  { background: var(--danger);  color: #fff; }
+    .btn-ghost   { background: var(--card); border: 1px solid var(--border); color: var(--text); }
+    .btn:disabled { opacity: .4; pointer-events: none; }
+    .btn-submit-upload { align-self: flex-end; }
+
+    .upload-progress {
+      margin-top: 1rem;
+      background: var(--card);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+      display: none;
+    }
+    .upload-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width .3s;
+      border-radius: 4px;
+    }
+    #upload-status { margin-top: .6rem; font-size: .85rem; color: var(--muted); }
+
+    /* ── BARRE DE RECHERCHE / FILTRES ──────── */
+    .toolbar {
+      display: flex;
+      gap: .8rem;
+      align-items: center;
+      margin-bottom: 1.2rem;
+      flex-wrap: wrap;
+    }
+    .toolbar input[type="text"] {
+      flex: 1;
+      min-width: 180px;
+      padding: .6rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: .9rem;
+      outline: none;
+    }
+    .toolbar input:focus { border-color: var(--accent); }
+    .filter-btn {
+      padding: .55rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      font-size: .85rem;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── GRILLE D'IMAGES ───────────────────── */
+    .grid-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .grid-header h2 { font-size: 1rem; color: var(--muted); }
+    #images-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .img-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: transform .15s, border-color .2s;
+    }
+    .img-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+    .img-card.inactive { opacity: .5; }
+    .img-thumb {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      background: var(--surface);
+    }
+    .img-card-body { padding: .7rem; }
+    .img-answer {
+      font-size: .85rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: .2rem;
+    }
+    .img-hints {
+      font-size: .75rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: .6rem;
+    }
+    .img-card-actions {
+      display: flex;
+      gap: .4rem;
+    }
+    .img-card-actions .btn { flex: 1; padding: .4rem; font-size: .75rem; justify-content: center; }
+    .badge-inactive {
+      font-size: .65rem;
+      background: var(--warn);
+      color: #000;
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-left: .4rem;
+    }
+
+    /* ── PAGINATION ────────────────────────── */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: .5rem;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+    .page-btn {
+      padding: .4rem .8rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      font-size: .85rem;
+    }
+    .page-btn.active { background: var(--accent); border-color: var(--accent); }
+    .page-btn:hover:not(.active) { border-color: var(--accent); }
+
+    /* ── LOADER ────────────────────────────── */
+    .loader {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-right: .5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── MODAL ─────────────────────────────── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      backdrop-filter: blur(4px);
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.8rem;
+      width: 100%;
+      max-width: 520px;
+      position: relative;
+    }
+    .modal h3 { font-size: 1.1rem; margin-bottom: 1.2rem; }
+    .modal-img-preview {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      background: var(--card);
+    }
+    .modal-field { margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1.4rem; }
+    .modal-close {
+      position: absolute;
+      top: 1rem; right: 1rem;
+      background: none; border: none; color: var(--muted);
+      font-size: 1.3rem; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    /* ── TOAST ─────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent2);
+      border-radius: var(--radius);
+      padding: .8rem 1.2rem;
+      font-size: .9rem;
+      z-index: 999;
+      transform: translateY(120%);
+      transition: transform .3s ease;
+      max-width: 320px;
+    }
+    #toast.show { transform: translateY(0); }
+    #toast.error { border-left-color: var(--danger); }
+    #toast.warn  { border-left-color: var(--warn); }
+
+    /* ── CONFIRM DIALOG ────────────────────── */
+    .confirm-msg { color: var(--muted); font-size: .9rem; margin-bottom: 1.4rem; }
+    .confirm-msg b { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ──────────────────────────────────────────────── -->
+<!--  PAGE DE CONNEXION                               -->
+<!-- ──────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🎮 GuessWhat</h1>
+    <p>Interface d'administration des images</p>
+    <input type="password" id="pwd-input" placeholder="Mot de passe admin" autocomplete="current-password" />
+    <button id="btn-login">Connexion</button>
+    <p id="login-error"></p>
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────── -->
+<!--  APPLICATION PRINCIPALE                         -->
+<!-- ──────────────────────────────────────────────── -->
+<div id="app">
+  <header>
+    <h1>GuessWhat — <span>Admin</span></h1>
+    <div class="header-right">
+      <span class="stat-badge">Total : <b id="stat-total">—</b></span>
+      <span class="stat-badge">Actives : <b id="stat-active">—</b></span>
+      <button class="btn-logout" id="btn-logout">Déconnexion</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── UPLOAD ──────────────────────────────────── -->
+    <div class="upload-section" id="upload-section">
+      <h2>➕ Ajouter des images</h2>
+      <div class="upload-form">
+        <!-- Zone drag & drop -->
+        <div class="drop-zone" id="drop-zone">
+          <span class="icon">🖼️</span>
+          <p>Glisse tes images ici<br>ou <b id="browse-link">parcourir</b></p>
+          <p id="file-count" style="color:var(--accent2); font-weight:600;"></p>
+          <input type="file" id="file-input" multiple accept="image/*" />
+        </div>
+
+        <!-- Réponses -->
+        <div>
+          <label class="field-label">Réponses acceptées (une par ligne) *</label>
+          <textarea id="upload-answers" rows="5" placeholder="nutella&#10;pâte à tartiner&#10;ferrero"></textarea>
+        </div>
+
+        <!-- Indices -->
+        <div>
+          <label class="field-label">Indices (un par ligne)</label>
+          <textarea id="upload-hints" rows="5" placeholder="à tartiner&#10;chocolat&#10;pot"></textarea>
+        </div>
+
+        <!-- Bouton -->
+        <div class="btn-submit-upload">
+          <button class="btn btn-success" id="btn-upload">⬆ Envoyer</button>
+        </div>
+      </div>
+
+      <div class="upload-progress" id="upload-progress">
+        <div class="upload-progress-bar" id="upload-progress-bar"></div>
+      </div>
+      <div id="upload-status"></div>
+    </div>
+
+    <!-- ── LISTE DES IMAGES ────────────────────────── -->
+    <div class="toolbar">
+      <input type="text" id="search-input" placeholder="🔍  Rechercher une réponse…" />
+      <button class="filter-btn active" data-filter="all">Toutes</button>
+      <button class="filter-btn" data-filter="active">Actives</button>
+      <button class="filter-btn" data-filter="inactive">Inactives</button>
+    </div>
+
+    <div class="grid-header">
+      <h2 id="grid-subtitle">Chargement…</h2>
+    </div>
+
+    <div id="images-grid"></div>
+    <div class="pagination" id="pagination"></div>
+  </main>
+</div>
+
+<!-- ── MODAL ÉDITION ─────────────────────────────── -->
+<div class="modal-backdrop" id="modal-edit" style="display:none;">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-edit">✕</button>
+    <h3>✏️ Modifier l'image</h3>
+    <img src="" alt="" id="modal-img-preview" class="modal-img-preview" />
+    <input type="hidden" id="modal-id" />
+    <div class="modal-field">
+      <label class="field-label">Réponses acceptées (une par ligne) *</label>
+      <textarea id="modal-answers" rows="5"></textarea>
+    </div>
+    <div class="modal-field">
+      <label class="field-label">Indices (un par ligne)</label>
+      <textarea id="modal-hints" rows="4"></textarea>
+    </div>
+    <div class="modal-field">
+      <label class="field-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+        <input type="checkbox" id="modal-active" style="width:16px;height:16px;" />
+        Image active (affichée en jeu)
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="modal-edit">Annuler</button>
+      <button class="btn btn-primary" id="btn-save-edit">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CONFIRMATION SUPPRESSION ────────────── -->
+<div class="modal-backdrop" id="modal-delete" style="display:none;">
+  <div class="modal" style="max-width:380px; text-align:center;">
+    <button class="modal-close" data-close="modal-delete">✕</button>
+    <h3>🗑️ Supprimer l'image ?</h3>
+    <p class="confirm-msg">Cette action est <b>irréversible</b>. L'image sera supprimée du stockage et de la base de données.</p>
+    <input type="hidden" id="delete-id" />
+    <div class="modal-actions" style="justify-content:center;">
+      <button class="btn btn-ghost" data-close="modal-delete">Annuler</button>
+      <button class="btn btn-danger" id="btn-confirm-delete">Supprimer</button>
+    </div>
+  </div>
+</div>
+<!-- ── MODAL SETUP SQL ──────────────────────────── -->
+<div class="modal-backdrop" id="modal-setup" style="display:none;">
+  <div class="modal" style="max-width:640px;">
+    <button class="modal-close" data-close="modal-setup">✕</button>
+    <h3>⚙️ Configuration initiale requise</h3>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:1rem;">
+      La table <code style="color:var(--accent)">game_images</code> n'existe pas encore dans Supabase.
+      Copie ce SQL et exécute-le dans le <a href="https://supabase.com/dashboard/project/ywmmxtkdtusdqluxmczv/sql/new" target="_blank" style="color:var(--accent2);">SQL Editor Supabase</a>.
+    </p>
+    <pre id="setup-sql" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;font-size:.78rem;overflow-x:auto;white-space:pre-wrap;color:var(--accent2);max-height:320px;overflow-y:auto;"></pre>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btn-copy-sql">&#128203; Copier le SQL</button>
+      <a class="btn btn-primary" href="https://supabase.com/dashboard/project/ywmmxtkdtusdqluxmczv/sql/new" target="_blank">🚀 Ouvrir SQL Editor</a>
+    </div>
+  </div>
+</div>
+<!-- ── TOAST ──────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ──────────────────────────────────────────────────────
+//  ÉTAT GLOBAL
+// ──────────────────────────────────────────────────────
+let PWD          = '';
+let allImages    = [];        // cache local de toutes les images chargées
+let filteredList = [];        // après filtre + recherche
+let currentPage  = 1;
+const PAGE_SIZE  = 48;
+let currentFilter = 'all';
+let searchQuery   = '';
+
+// ──────────────────────────────────────────────────────
+//  UTILITAIRES
+// ──────────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = type === 'error' ? 'error' : type === 'warn' ? 'warn' : '';
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+async function api(method, path, body, isFormData = false) {
+  const opts = {
+    method,
+    headers: { 'x-admin-password': PWD }
+  };
+  if (body && isFormData) {
+    opts.body = body;
+  } else if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res  = await fetch('/admin/api' + path, opts);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Erreur serveur');
+  return json;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ──────────────────────────────────────────────────────
+//  LOGIN
+// ──────────────────────────────────────────────────────
+document.getElementById('btn-login').addEventListener('click', tryLogin);
+document.getElementById('pwd-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tryLogin();
+});
+
+async function tryLogin() {
+  const pwd = document.getElementById('pwd-input').value;
+  document.getElementById('login-error').textContent = '';
+  try {
+    PWD = pwd;
+    await api('GET', '/stats');          // test auth
+    sessionStorage.setItem('admin_pwd', pwd);
+    showApp();
+  } catch {
+    PWD = '';
+    document.getElementById('login-error').textContent = 'Mot de passe incorrect.';
+  }
+}
+
+// Auto-login si session en cours
+const savedPwd = sessionStorage.getItem('admin_pwd');
+if (savedPwd) {
+  PWD = savedPwd;
+  api('GET', '/stats').then(() => showApp()).catch(() => { PWD = ''; });
+}
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  sessionStorage.removeItem('admin_pwd');
+  PWD = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('pwd-input').value = '';
+});
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display          = 'flex';
+  loadAll();
+}
+
+// ──────────────────────────────────────────────────────
+//  CHARGEMENT DES IMAGES
+// ──────────────────────────────────────────────────────
+async function loadAll() {
+  document.getElementById('images-grid').innerHTML =
+    '<div class="loader"><span class="spinner"></span>Chargement…</div>';
+
+  try {
+    // Vérifie stats d'abord (détecte si la table manque)
+    const stats = await api('GET', '/stats');
+
+    document.getElementById('stat-total').textContent  = stats.total  ?? '?';
+    document.getElementById('stat-active').textContent = stats.active ?? '?';
+
+    // Charge les images
+    const first = await api('GET', '/images?page=1&limit=100');
+    let images  = first.images;
+    const total = first.total;
+    if (total > 100) {
+      const pages = Math.ceil(total / 100);
+      const reqs  = [];
+      for (let p = 2; p <= pages; p++) reqs.push(api('GET', `/images?page=${p}&limit=100`));
+      const rest = await Promise.all(reqs);
+      rest.forEach(r => images = images.concat(r.images));
+    }
+
+    allImages = images;
+    applyFilter();
+
+  } catch (e) {
+    // Tente de détecter si c'est un problème de table manquante
+    try {
+      const info = await api('GET', '/setup');
+      document.getElementById('setup-sql').textContent = info.sql;
+      document.getElementById('modal-setup').style.display = 'flex';
+      document.getElementById('images-grid').innerHTML =
+        '<div class="loader">⚠️ Table manquante — exécute le SQL de configuration.</div>';
+    } catch {
+      document.getElementById('images-grid').innerHTML =
+        `<div class="loader">Erreur : ${escHtml(e.message)}</div>`;
+    }
+  }
+}
+
+async function refreshStats() {
+  try {
+    const s = await api('GET', '/stats');
+    document.getElementById('stat-total').textContent  = s.total  ?? '?';
+    document.getElementById('stat-active').textContent = s.active ?? '?';
+  } catch {}
+}
+
+// ──────────────────────────────────────────────────────
+//  FILTRES + RECHERCHE
+// ──────────────────────────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    currentPage   = 1;
+    applyFilter();
+  });
+});
+
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  currentPage = 1;
+  applyFilter();
+});
+
+function applyFilter() {
+  filteredList = allImages.filter(img => {
+    if (currentFilter === 'active'   && !img.active)  return false;
+    if (currentFilter === 'inactive' &&  img.active)  return false;
+    if (searchQuery) {
+      const haystack = (img.answers.join(' ') + ' ' + img.hints.join(' '))
+        .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if (!haystack.includes(searchQuery)) return false;
+    }
+    return true;
+  });
+  renderGrid();
+}
+
+// ──────────────────────────────────────────────────────
+//  RENDU GRILLE
+// ──────────────────────────────────────────────────────
+function renderGrid() {
+  const total    = filteredList.length;
+  const pages    = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  currentPage    = Math.min(currentPage, pages);
+  const start    = (currentPage - 1) * PAGE_SIZE;
+  const slice    = filteredList.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('grid-subtitle').textContent =
+    `${total} image${total > 1 ? 's' : ''} • page ${currentPage}/${pages}`;
+
+  const grid = document.getElementById('images-grid');
+  if (slice.length === 0) {
+    grid.innerHTML = '<div class="loader">Aucune image.</div>';
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  grid.innerHTML = slice.map(img => `
+    <div class="img-card${img.active ? '' : ' inactive'}" data-id="${img.id}">
+      <img class="img-thumb" src="${escHtml(img.url)}" alt="${escHtml(img.answers[0] || '')}"
+           loading="lazy" onerror="this.style.background='#333'" />
+      <div class="img-card-body">
+        <div class="img-answer">
+          ${escHtml(img.answers[0] || '—')}
+          ${!img.active ? '<span class="badge-inactive">off</span>' : ''}
+        </div>
+        <div class="img-hints">${escHtml(img.hints[0] || '')}</div>
+        <div class="img-card-actions">
+          <button class="btn btn-ghost btn-edit" data-id="${img.id}">✏️</button>
+          <button class="btn btn-danger btn-delete" data-id="${img.id}">🗑️</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Pagination
+  const pag = document.getElementById('pagination');
+  if (pages <= 1) { pag.innerHTML = ''; return; }
+
+  let btnHtml = '';
+  if (currentPage > 1) btnHtml += `<button class="page-btn" data-pg="${currentPage-1}">‹</button>`;
+  for (let i = Math.max(1, currentPage-3); i <= Math.min(pages, currentPage+3); i++) {
+    btnHtml += `<button class="page-btn${i===currentPage?' active':''}" data-pg="${i}">${i}</button>`;
+  }
+  if (currentPage < pages) btnHtml += `<button class="page-btn" data-pg="${currentPage+1}">›</button>`;
+  pag.innerHTML = btnHtml;
+}
+
+// ── Délégation sur la grille ─────────────────────────
+document.getElementById('images-grid').addEventListener('click', e => {
+  const editBtn   = e.target.closest('.btn-edit');
+  const deleteBtn = e.target.closest('.btn-delete');
+  if (editBtn)   openEditModal(editBtn.dataset.id);
+  if (deleteBtn) openDeleteModal(deleteBtn.dataset.id);
+});
+
+// ── Pagination ───────────────────────────────────────
+document.getElementById('pagination').addEventListener('click', e => {
+  const btn = e.target.closest('.page-btn');
+  if (!btn) return;
+  currentPage = parseInt(btn.dataset.pg, 10);
+  renderGrid();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ──────────────────────────────────────────────────────
+//  UPLOAD
+// ──────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+let   filesToUpload = [];
+
+document.getElementById('browse-link').addEventListener('click', e => {
+  e.stopPropagation();
+  fileInput.click();
+});
+dropZone.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  filesToUpload = Array.from(fileInput.files);
+  updateFileCount();
+});
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  document.getElementById('upload-section').classList.add('drag-over');
+});
+['dragleave','dragend'].forEach(ev => {
+  dropZone.addEventListener(ev, () =>
+    document.getElementById('upload-section').classList.remove('drag-over'));
+});
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('upload-section').classList.remove('drag-over');
+  filesToUpload = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  updateFileCount();
+});
+
+function updateFileCount() {
+  const el = document.getElementById('file-count');
+  if (filesToUpload.length === 0) {
+    el.textContent = '';
+    dropZone.classList.remove('has-files');
+  } else {
+    el.textContent = `${filesToUpload.length} fichier${filesToUpload.length > 1 ? 's' : ''} sélectionné${filesToUpload.length > 1 ? 's' : ''}`;
+    dropZone.classList.add('has-files');
+  }
+}
+
+document.getElementById('btn-upload').addEventListener('click', uploadFiles);
+
+async function uploadFiles() {
+  const answers = document.getElementById('upload-answers').value.trim();
+  const hints   = document.getElementById('upload-hints').value.trim();
+
+  if (filesToUpload.length === 0) { toast('Sélectionne au moins une image.', 'warn'); return; }
+  if (!answers)                   { toast('Renseigne au moins une réponse.', 'warn'); return; }
+
+  const btn      = document.getElementById('btn-upload');
+  const progWrap = document.getElementById('upload-progress');
+  const progBar  = document.getElementById('upload-progress-bar');
+  const status   = document.getElementById('upload-status');
+
+  btn.disabled = true;
+  progWrap.style.display = 'block';
+  progBar.style.width    = '0%';
+
+  let ok = 0, fail = 0;
+
+  for (let i = 0; i < filesToUpload.length; i++) {
+    const file = filesToUpload[i];
+    status.textContent = `Envoi ${i+1}/${filesToUpload.length} : ${file.name}`;
+    progBar.style.width = `${Math.round((i / filesToUpload.length) * 100)}%`;
+
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('answers', answers);
+    fd.append('hints', hints);
+
+    try {
+      const newImg = await api('POST', '/images', fd, true);
+      allImages.unshift(newImg);
+      ok++;
+    } catch (e) {
+      fail++;
+      console.error('Upload failed:', e.message);
+    }
+  }
+
+  progBar.style.width = '100%';
+  status.textContent  = `✅ ${ok} envoyée${ok>1?'s':''} ${fail > 0 ? `· ❌ ${fail} échouée${fail>1?'s':''}` : ''}`;
+
+  // Reset
+  filesToUpload = [];
+  fileInput.value = '';
+  document.getElementById('upload-answers').value = '';
+  document.getElementById('upload-hints').value   = '';
+  updateFileCount();
+  btn.disabled = false;
+
+  toast(`${ok} image${ok>1?'s':''} ajoutée${ok>1?'s':''}${fail>0?' ('+fail+' erreur'+( fail>1?'s':'')+')':''}`, fail > 0 ? 'warn' : 'ok');
+  applyFilter();
+  refreshStats();
+
+  setTimeout(() => {
+    progWrap.style.display = 'none';
+    status.textContent = '';
+  }, 4000);
+}
+
+// ──────────────────────────────────────────────────────
+//  MODAL ÉDITION
+// ──────────────────────────────────────────────────────
+function openEditModal(id) {
+  const img = allImages.find(i => i.id === id);
+  if (!img) return;
+
+  document.getElementById('modal-id').value            = id;
+  document.getElementById('modal-img-preview').src     = img.url;
+  document.getElementById('modal-answers').value       = (img.answers || []).join('\n');
+  document.getElementById('modal-hints').value         = (img.hints   || []).join('\n');
+  document.getElementById('modal-active').checked      = img.active !== false;
+  document.getElementById('modal-edit').style.display  = 'flex';
+}
+
+document.getElementById('btn-save-edit').addEventListener('click', async () => {
+  const id      = document.getElementById('modal-id').value;
+  const answers = document.getElementById('modal-answers').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const hints   = document.getElementById('modal-hints').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const active  = document.getElementById('modal-active').checked;
+
+  if (answers.length === 0) { toast('Au moins une réponse est requise.', 'warn'); return; }
+
+  try {
+    const updated = await api('PATCH', `/images/${id}`, { answers, hints, active });
+    const idx = allImages.findIndex(i => i.id === id);
+    if (idx !== -1) allImages[idx] = updated;
+    closeModal('modal-edit');
+    applyFilter();
+    refreshStats();
+    toast('Modifications enregistrées.');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+});
+
+// ──────────────────────────────────────────────────────
+//  MODAL SUPPRESSION
+// ──────────────────────────────────────────────────────
+function openDeleteModal(id) {
+  document.getElementById('delete-id').value = id;
+  document.getElementById('modal-delete').style.display = 'flex';
+}
+
+document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
+  const id = document.getElementById('delete-id').value;
+  try {
+    await api('DELETE', `/images/${id}`);
+    allImages = allImages.filter(i => i.id !== id);
+    closeModal('modal-delete');
+    applyFilter();
+    refreshStats();
+    toast('Image supprimée.');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+});
+
+// ──────────────────────────────────────────────────────
+//  FERMETURE MODALES
+// ──────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', () => closeModal(el.dataset.close));
+});
+
+document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+  backdrop.addEventListener('click', e => {
+    if (e.target === backdrop) closeModal(backdrop.id);
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-backdrop').forEach(m => {
+      m.style.display = 'none';
+    });
+  }
+});
+
+// ── Copier SQL ───────────────────────────────────────────
+document.getElementById('btn-copy-sql').addEventListener('click', () => {
+  const sql = document.getElementById('setup-sql').textContent;
+  navigator.clipboard.writeText(sql).then(() => {
+    toast('SQL copié dans le presse-papiers !');
+  }).catch(() => {
+    toast('Impossible de copier automatiquement.', 'warn');
+  });
+});
+</script>
+</body>
+</html>
