@@ -173,8 +173,7 @@ socket.on('game:roundStart', (data) => {
     const sep = document.createElement('div');
     sep.className = 'chat-round-sep';
     sep.innerHTML = `<span class="chat-round-sep__line"></span><span class="chat-round-sep__label">MANCHE ${currentRound}</span><span class="chat-round-sep__line"></span>`;
-    history.appendChild(sep);
-    history.scrollTop = history.scrollHeight;
+    appendToAllHistories(sep);
   }
 
   const input = document.getElementById('guess-input');
@@ -386,9 +385,7 @@ function updatePixelInfo(stepIdx) {
 
 function renderPlayerList(players) {
   currentPlayers = players;
-  const list = document.getElementById('player-list');
-  if (!list) return;
-  list.innerHTML = players
+  const html = players
     .sort((a, b) => b.score - a.score)
     .map(p => `
       <div class="player-entry ${p.id === mySocketId ? 'me' : ''}">
@@ -397,20 +394,34 @@ function renderPlayerList(players) {
         <span class="player-score-box">${p.score}</span>
       </div>
     `).join('');
+
+  const list = document.getElementById('player-list');
+  if (list) list.innerHTML = html;
+  const mobileList = document.getElementById('mobile-player-list');
+  if (mobileList) mobileList.innerHTML = html;
 }
 
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function addGuessToHistory(pseudo, text, correct, isMe) {
+function appendToAllHistories(el) {
   const history = document.getElementById('guess-history');
+  history.appendChild(el);
+  history.scrollTop = history.scrollHeight;
+  const mobileHistory = document.getElementById('mobile-guess-history');
+  if (mobileHistory) {
+    mobileHistory.appendChild(el.cloneNode(true));
+    mobileHistory.scrollTop = mobileHistory.scrollHeight;
+  }
+}
+
+function addGuessToHistory(pseudo, text, correct, isMe) {
   const entry   = document.createElement('div');
   entry.className = 'guess-entry' + (correct ? ' correct' : '');
   const name = escapeHtml((isMe ? myPseudo : pseudo).toUpperCase());
   entry.innerHTML = `<span class="guess-name">${name}</span><span class="guess-text">${escapeHtml(text)}</span>`;
-  history.appendChild(entry);
-  history.scrollTop = history.scrollHeight;
+  appendToAllHistories(entry);
 }
 
 function addRoundSeparator(roundNum) {
@@ -419,29 +430,25 @@ function addRoundSeparator(roundNum) {
   const sep = document.createElement('div');
   sep.className   = 'round-separator';
   sep.innerHTML   = `<span class="sep-line"></span><span class="sep-label">MANCHE ${roundNum}</span><span class="sep-line"></span>`;
-  history.appendChild(sep);
-  history.scrollTop = history.scrollHeight;
+  appendToAllHistories(sep);
 }
 
 function addAnswerToHistory(answer, won, winner) {
-  const history = document.getElementById('guess-history');
-
   const entry = document.createElement('div');
   entry.className = won ? 'chat-result chat-result--found' : 'chat-result chat-result--missed';
 
   if (won) {
     const who = winner ? escapeHtml(winner.toUpperCase()) : 'QUELQU\'UN';
     entry.innerHTML =
-      `<span class="chat-result__who">${who} a trouvé :</span>` +
+      `<span class="chat-result__who">${who} a trouvé :</span>` +
       `<span class="chat-result__answer chat-result__answer--found">${escapeHtml(answer.toUpperCase())}</span>`;
   } else {
     entry.innerHTML =
-      `<span class="chat-result__who">Réponse :</span>` +
+      `<span class="chat-result__who">Réponse :</span>` +
       `<span class="chat-result__answer chat-result__answer--missed">${escapeHtml(answer.toUpperCase())}</span>`;
   }
 
-  history.appendChild(entry);
-  history.scrollTop = history.scrollHeight;
+  appendToAllHistories(entry);
 }
 
 // Timer UI (le serveur ne gère plus de timer explicite côté client,

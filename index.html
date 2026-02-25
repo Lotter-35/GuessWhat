@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>PIXELIZ — Devine l'image</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -40,6 +40,18 @@
     <!-- Header visible uniquement sur mobile -->
     <div class="mobile-top-bar">
       <div class="logo">GUESS<span>WHAT</span></div>
+    </div>
+
+    <!-- Scoreboard visible uniquement sur mobile (entre logo et canvas) -->
+    <div class="mobile-scoreboard-wrap">
+      <div class="panel-block-label">SCOREBOARD</div>
+      <div id="mobile-player-list" class="player-list"></div>
+    </div>
+
+    <!-- Chat visible uniquement sur mobile (entre scoreboard et canvas) -->
+    <div class="mobile-chat-wrap">
+      <div class="panel-block-label">CHAT</div>
+      <div id="mobile-guess-history" class="guess-history"></div>
     </div>
 
     <!-- ── GAUCHE : CANVAS ── -->

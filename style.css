@@ -152,6 +152,11 @@ header {
   flex-shrink: 0;
 }
 
+/* Scoreboard mobile (entre logo et canvas) — masqué sur desktop */
+.mobile-scoreboard-wrap {
+  display: none;
+}
+
 /* ── LISTE DES JOUEURS ── */
 .player-list {
   display: flex;
@@ -653,6 +658,11 @@ canvas {
   display: none;
 }
 
+/* Chat mobile-only (entre scoreboard et canvas) */
+.mobile-chat-wrap {
+  display: none;
+}
+
 /* ══════════════════════════════════════
    RESPONSIVE MOBILE (< 640px)
 ══════════════════════════════════════ */
@@ -699,30 +709,46 @@ canvas {
   }
 
   .panel-side {
-    flex: 1;
+    flex: 0 0 auto;
     width: 100%;
-    height: 0;
+    height: auto;
     min-height: 0;
     border-left: none;
     border-top: 1px solid var(--border);
   }
 
-  /* Scoreboard horizontal compact sur mobile */
-  .panel-block:not(.chatbox-block) {
+  /* Scoreboard mobile visible */
+  .mobile-scoreboard-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 10px 4px;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    padding: 6px 10px;
   }
 
-  .panel-block:not(.chatbox-block) .player-list {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 5px;
-    padding-bottom: 2px;
+  /* Masque le scoreboard et le chat dans le panel-side sur mobile */
+  .panel-block:not(.chatbox-block),
+  .panel-block.chatbox-block {
+    display: none;
   }
 
-  .panel-block:not(.chatbox-block) .player-list::-webkit-scrollbar { height: 2px; }
-  .panel-block:not(.chatbox-block) .player-list::-webkit-scrollbar-thumb { background: var(--border); }
+  /* Affiche le chat mobile */
+  .mobile-chat-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 4px 10px 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .mobile-chat-wrap .guess-history {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
 
   .panel-block:not(.chatbox-block) .player-entry {
     flex-shrink: 0;
@@ -735,17 +761,24 @@ canvas {
   }
 
   .guess-input {
-    font-size: 1rem;
-    padding: 10px 12px;
+    font-size: 10px;
+    padding: 4px 6px;
   }
 
   .btn-submit {
-    font-size: 1.2rem;
-    padding: 10px 18px;
+    font-size: 10px;
+    padding: 5px 10px;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 0 #7a0020;
   }
   .btn-skip {
-    font-size: 1rem;
-    padding: 10px 12px;
+    font-size: 10px;
+    padding: 5px 8px;
+  }
+
+  .bottom-bar {
+    padding: 6px 10px 8px;
+    gap: 4px;
   }
 
   .login-logo {
