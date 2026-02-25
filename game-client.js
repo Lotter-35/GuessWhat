@@ -28,6 +28,8 @@ let roundSolved    = false;
 let schedule       = [];
 let roundEndImg    = null;
 let stepTimerInterval = null;  // timer local pour le cercle
+let currentPlayers    = [];    // liste joueurs courante (pour re-render au skip)
+let skipVotedIds      = new Set(); // IDs ayant voté skip cette manche
 // CONNEXION SOCKET.IO
 // ─────────────────────────────────────────────
 const socket = io();
@@ -75,6 +77,14 @@ socket.on('game:sync', (state) => {
   currentRound = state.roundNumber || 1;
   currentStep  = state.currentStep;
   roundSolved  = state.roundSolved;
+
+  // Sync des votes skip déjà en cours
+  skipVotedIds = new Set(state.skipIds || []);
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip && skipVotedIds.has(mySocketId)) {
+    btnSkip.classList.add('voted');
+    btnSkip.disabled = true;
+  }
 
   updateRoundInfo(currentRound);
   updatePixelInfo(currentStep);
@@ -177,6 +187,12 @@ socket.on('game:roundStart', (data) => {
   document.getElementById('feedback-overlay').className  = 'feedback-overlay';
   document.querySelector('.timer-wrap').style.visibility = 'visible';
 
+  // Reset skip
+  skipVotedIds = new Set();
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip) { btnSkip.classList.remove('voted'); btnSkip.disabled = false; }
+  renderPlayerList(currentPlayers);
+
   // Canvas de chargement
   showCanvasMessage('CHARGEMENT…', '#2a2a3a');
 
@@ -233,12 +249,18 @@ socket.on('game:roundEnd', (data) => {
       roundEndImg = img;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, W, H);
       ctx.drawImage(img, 0, 0, W, H);
     };
     img.src = data.imageUrl;
   }
 
   document.getElementById('guess-input').disabled = true;
+
+  // Masque + désactive le skip
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip) { btnSkip.disabled = true; btnSkip.classList.remove('voted'); }
 
   // Points si on a gagné
   if (myWin && data.points) {
@@ -297,6 +319,21 @@ socket.on('players:update', (players) => {
 socket.on('game:over', () => { /* partie infinie, ne se déclenche plus */ });
 
 // ─────────────────────────────────────────────
+// ÉVÉNEMENT : VOTES SKIP
+// ─────────────────────────────────────────────
+socket.on('game:skipUpdate', (data) => {
+  skipVotedIds = new Set(data.skipIds);
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip) {
+    const iVoted = skipVotedIds.has(mySocketId);
+    btnSkip.classList.toggle('voted', iVoted);
+    btnSkip.disabled = iVoted;
+    btnSkip.title = `${data.skipIds.length}/${data.total} vote(s) — ${data.needed} nécessaire(s)`;
+  }
+  renderPlayerList(currentPlayers);
+});
+
+// ─────────────────────────────────────────────
 // SUBMIT GUESS
 // ─────────────────────────────────────────────
 function submitGuess() {
@@ -306,6 +343,11 @@ function submitGuess() {
   if (!text) return;
   socket.emit('player:guess', text);
   input.value = '';
+}
+
+function submitSkip() {
+  if (roundSolved) return;
+  socket.emit('player:skip');
 }
 
 document.getElementById('guess-input').addEventListener('keydown', e => {
@@ -343,14 +385,16 @@ function updatePixelInfo(stepIdx) {
 }
 
 function renderPlayerList(players) {
+  currentPlayers = players;
   const list = document.getElementById('player-list');
   if (!list) return;
   list.innerHTML = players
     .sort((a, b) => b.score - a.score)
     .map(p => `
-      <div class="player-entry ${p.pseudo === myPseudo ? 'me' : ''}">
+      <div class="player-entry ${p.id === mySocketId ? 'me' : ''}">
         <span class="player-pseudo">${escapeHtml(p.pseudo)}</span>
-        <span class="player-score-val">${p.score}</span>
+        <span class="player-skip-wrap">${skipVotedIds.has(p.id) ? '⏭' : ''}</span>
+        <span class="player-score-box">${p.score}</span>
       </div>
     `).join('');
 }

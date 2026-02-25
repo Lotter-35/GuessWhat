@@ -180,8 +180,29 @@ header {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
-.player-score-val { color: var(--gold); font-weight: 700; margin-left: 6px; }
+.player-skip-wrap {
+  width: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+.player-score-box {
+  flex-shrink: 0;
+  width: 44px;
+  text-align: right;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.7rem;
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
 
 /* ── HISTORIQUE (Chatbox) ── */
 .guess-history {
@@ -358,6 +379,32 @@ header {
 .btn-submit:active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 #7a0020;
+}
+
+.btn-skip {
+  background: transparent;
+  border: 1px solid var(--dim);
+  border-radius: 3px;
+  color: var(--dim);
+  font-size: 1rem;
+  padding: 7px 10px;
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.btn-skip:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(255,215,0,0.07);
+}
+.btn-skip.voted,
+.btn-skip:disabled {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(255,215,0,0.12);
+  cursor: default;
+  opacity: 0.8;
 }
 
 .btn-next {
@@ -695,6 +742,10 @@ canvas {
   .btn-submit {
     font-size: 1.2rem;
     padding: 10px 18px;
+  }
+  .btn-skip {
+    font-size: 1rem;
+    padding: 10px 12px;
   }
 
   .login-logo {

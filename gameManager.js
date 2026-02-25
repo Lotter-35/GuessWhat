@@ -4,10 +4,9 @@ const sharp     = require('sharp');
 const fetch     = require('node-fetch');
 
 // ─────────────────────────────────────────────
-// DONNÉES DES MANCHES (uniquement côté serveur)
-// Les URLs d'images ne sont JAMAIS envoyées aux clients.
+// MANCHES DE SECOURS (si les APIs échouent)
 // ─────────────────────────────────────────────
-const ROUNDS = [
+const FALLBACK_ROUNDS = [
   {
     imageUrl: 'https://i0.wp.com/dawtonasarl.com/wp-content/uploads/2025/03/unnamed.jpg?fit=900,900&ssl=1',
     answers:  ['nutella', 'pâte à tartiner', 'noisette', 'ferrero'],
@@ -29,6 +28,116 @@ const ROUNDS = [
     hints:    ['mammifère', 'aquatique', 'fourrure']
   }
 ];
+
+// ─────────────────────────────────────────────
+// CHARGEMENT DYNAMIQUE DES MANCHES DEPUIS LES APIs
+// ─────────────────────────────────────────────
+
+/** Supprime les doublons dans un tableau (comparaison stricte). */
+function uniqueArr(arr) {
+  return arr.filter((v, i, a) => a.indexOf(v) === i);
+}
+
+/** Mélange un tableau en place (Fisher-Yates). */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
+ * Charge les manches depuis :
+ *  - sampleapis.com  → films avec poster Amazon
+ *  - PokéAPI         → 151 Pokémon Gen-1 avec artwork officiel
+ */
+async function loadRoundsFromAPIs() {
+  const rounds = [];
+
+  // ── 1. Films ──────────────────────────────────────────────────────────────
+  const MOVIE_CATS = ['comedy', 'animation', 'adventure'];
+
+  await Promise.all(MOVIE_CATS.map(async cat => {
+    try {
+      const resp = await fetch(`https://api.sampleapis.com/movies/${cat}`, {
+        headers: { Accept: 'application/json' }
+      });
+      if (!resp.ok) return;
+      const movies = await resp.json();
+      if (!Array.isArray(movies)) return;
+
+      for (const m of movies) {
+        if (!m.posterURL || m.posterURL === 'N/A') continue;
+        const title = (m.title || '').trim();
+        if (!title) continue;
+
+        // Proposer le titre complet ET une version sans ponctuation complexe
+        const titleSimple = title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
+        const answers = uniqueArr([title, titleSimple].filter(Boolean));
+
+        rounds.push({
+          imageUrl: m.posterURL,
+          answers,
+          hints: ['film', 'cinéma', cat]
+        });
+      }
+      console.log(`[API] movies/${cat} : ${movies.filter(m => m.posterURL && m.posterURL !== 'N/A').length} films chargés`);
+    } catch (e) {
+      console.error(`[API] movies/${cat} erreur :`, e.message);
+    }
+  }));
+
+  // ── 2. Pokémon Génération 1 (ids 1-151) ───────────────────────────────────
+  const POKE_COUNT  = 151;
+  const BATCH_SIZE  = 15;
+
+  for (let start = 1; start <= POKE_COUNT; start += BATCH_SIZE) {
+    const end = Math.min(start + BATCH_SIZE - 1, POKE_COUNT);
+    const ids  = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+
+    await Promise.all(ids.map(async id => {
+      try {
+        const [poke, species] = await Promise.all([
+          fetch(`https://pokeapi.co/api/v2/pokemon/${id}`).then(r => r.json()),
+          fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`).then(r => r.json())
+        ]);
+
+        const img = poke.sprites?.other?.['official-artwork']?.front_default;
+        if (!img) return;
+
+        const nameFr    = species.names.find(n => n.language.name === 'fr')?.name   || '';
+        const nameEnRaw = poke.name; // ex: "bulbasaur"
+        const nameEn    = nameEnRaw.charAt(0).toUpperCase() + nameEnRaw.slice(1);
+
+        // Construire la liste de réponses acceptées
+        const answers = uniqueArr([
+          nameFr,
+          nameFr.toLowerCase(),
+          nameEn,
+          nameEnRaw
+        ].filter(Boolean));
+
+        const types = poke.types.map(t => t.type.name);
+
+        rounds.push({
+          imageUrl: img,
+          answers,
+          hints: ['pokémon', ...types]
+        });
+      } catch (e) {
+        console.error(`[API] Pokémon #${id} erreur :`, e.message);
+      }
+    }));
+  }
+  console.log(`[API] Pokémon : ${rounds.filter(r => r.hints[0] === 'pokémon').length} chargés`);
+
+  // ── 3. Mélange final ──────────────────────────────────────────────────────
+  shuffle(rounds);
+
+  console.log(`[API] Total manches disponibles : ${rounds.length}`);
+  return rounds.length > 0 ? rounds : FALLBACK_ROUNDS;
+}
 
 // ─────────────────────────────────────────────
 // PARAMÈTRES DE PIXELISATION
@@ -54,7 +163,8 @@ class GameManager {
   constructor(io) {
     this.io           = io;
     this.players      = new Map();   // socketId → { pseudo, score }
-    this.currentRound = 0;           // index dans ROUNDS (modulo)
+    this._rounds      = FALLBACK_ROUNDS; // manches chargées dynamiquement (APIs)
+    this.currentRound = 0;           // index dans this._rounds (modulo)
     this.roundNumber  = 1;           // numéro de manche affiché (incrémente à l'infini)
     this.currentStep  = 0;
     this.roundSolved  = false;
@@ -62,6 +172,7 @@ class GameManager {
     this.started      = false;
     this._stepStartedAt          = null;   // timestamp du début de l'étape courante
     this._totalRemainingAtStart  = 0;      // secondes restantes au début de l'étape courante
+    this._skipVotes              = new Set(); // socketIds ayant voté skip
 
     // Pixels natifs (chargés en mémoire, jamais envoyés)
     this.nativePixels = null;
@@ -88,7 +199,19 @@ class GameManager {
 
   removePlayer(socketId) {
     this.players.delete(socketId);
+    const hadVoted = this._skipVotes.delete(socketId);
     this._broadcastPlayers();
+    // Réévaluer le skip si ce joueur avait voté (le seuil change avec 1 joueur en moins)
+    if (hadVoted && !this.roundSolved && this.players.size > 0) {
+      const count  = this.players.size;
+      const needed = Math.floor(count / 2) + 1;
+      if (this._skipVotes.size >= needed) {
+        console.log(`[GAME] Skip validé après déconnexion d'un joueur (${this._skipVotes.size}/${count})`);
+        this._handleTimeout();
+      } else {
+        this._broadcastSkipUpdate();
+      }
+    }
   }
 
   _broadcastPlayers() {
@@ -193,10 +316,11 @@ class GameManager {
     this.currentStep  = 0;
     this.roundSolved  = false;
     this.roundWinner  = null;
+    this._skipVotes   = new Set();
     this._clearTimers();
 
-    const round = ROUNDS[this.currentRound];
-    console.log(`[GAME] Manche ${this.roundNumber} (image ${this.currentRound + 1}) : ${round.answers[0]}`);
+    const round = this._rounds[this.currentRound];
+    console.log(`[GAME] Manche ${this.roundNumber} (image ${this.currentRound + 1}/${this._rounds.length}) : ${round.answers[0]}`);
 
     // Charge l'image côté serveur
     try {
@@ -260,7 +384,7 @@ class GameManager {
     this.roundSolved = true;
     this._clearTimers();
 
-    const round = ROUNDS[this.currentRound];
+    const round = this._rounds[this.currentRound];
     console.log(`[GAME] Timeout — réponse : ${round.answers[0]}`);
 
     this.io.emit('game:roundEnd', {
@@ -279,7 +403,7 @@ class GameManager {
     const player = this.players.get(socketId);
     if (!player) return;
 
-    const round   = ROUNDS[this.currentRound];
+    const round   = this._rounds[this.currentRound];
     const normalize = s => s.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // ignore accents
     const cleaned = normalize(text);
@@ -303,7 +427,7 @@ class GameManager {
     this.roundSolved = true;
     this._clearTimers();
 
-    const round = ROUNDS[this.currentRound];
+    const round = this._rounds[this.currentRound];
 
     // Calcul du score
     const basePoints = 500;
@@ -328,10 +452,34 @@ class GameManager {
     this._scheduleNextRound(3000);
   }
 
+  // ── Vote Skip ─────────────────────────────────
+  handleSkip(socketId) {
+    if (this.roundSolved || !this.players.has(socketId)) return;
+    this._skipVotes.add(socketId);
+    this._broadcastSkipUpdate();
+
+    const count  = this.players.size;
+    const needed = Math.floor(count / 2) + 1; // majorité stricte
+    if (this._skipVotes.size >= needed) {
+      console.log(`[GAME] Skip voté (${this._skipVotes.size}/${count}) → passage à la suite`);
+      this._handleTimeout();
+    }
+  }
+
+  _broadcastSkipUpdate() {
+    const count  = this.players.size;
+    const needed = Math.floor(count / 2) + 1;
+    this.io.emit('game:skipUpdate', {
+      skipIds: Array.from(this._skipVotes),
+      needed,
+      total: count
+    });
+  }
+
   _scheduleNextRound(delay) {
     this._nextTimer = setTimeout(async () => {
       // Boucle infinie sur les images
-      this.currentRound = (this.currentRound + 1) % ROUNDS.length;
+      this.currentRound = (this.currentRound + 1) % this._rounds.length;
       this.roundNumber++;
       await this.startRound(this.currentRound);
     }, delay);
@@ -350,6 +498,9 @@ class GameManager {
   async start() {
     if (this.started) return;
     this.started = true;
+    console.log('[API] Chargement des manches depuis les APIs...');
+    this._rounds = await loadRoundsFromAPIs();
+    this.currentRound = 0;
     await this.startRound(this.currentRound);
   }
 
@@ -361,6 +512,7 @@ class GameManager {
       roundSolved:           this.roundSolved,
       stepStartedAt:         this._stepStartedAt,
       totalRemainingAtStart: this._totalRemainingAtStart,
+      skipIds:               Array.from(this._skipVotes),
       players:      Array.from(this.players.entries()).map(([id, p]) => ({
         id, pseudo: p.pseudo, score: p.score
       })),

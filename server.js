@@ -67,6 +67,11 @@ io.on('connection', (socket) => {
     game.handleGuess(socket.id, text);
   });
 
+  // ── Vote Skip ────────────────────────────────
+  socket.on('player:skip', () => {
+    game.handleSkip(socket.id);
+  });
+
   // ── Déconnexion ──────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[SOCKET] Déconnexion : ${socket.id}`);
