@@ -17,7 +17,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Space Mono', monospace;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: block;
 }
@@ -27,7 +27,7 @@ body {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
 }
 
@@ -600,3 +600,109 @@ canvas {
 }
 
 .feedback-overlay.other-win { color: var(--accent2); }
+
+/* Header mobile-only (au-dessus du canvas) */
+.mobile-top-bar {
+  display: none;
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE MOBILE (< 640px)
+══════════════════════════════════════ */
+@media (max-width: 639px) {
+
+  body { height: 100dvh; }
+
+  #app {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  /* Affiche le logo en haut, masque celui du panneau */
+  .mobile-top-bar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .mobile-top-bar .logo {
+    font-size: 1.6rem;
+    letter-spacing: 3px;
+  }
+
+  .panel-side > header {
+    display: none;
+  }
+
+  .canvas-side {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    padding: 10px 10px 16px;
+    justify-content: center;
+  }
+
+  .canvas-container {
+    width:  min(calc(100vw - 20px), 42dvh);
+    height: min(calc(100vw - 20px), 42dvh);
+  }
+
+  .panel-side {
+    flex: 1;
+    width: 100%;
+    height: 0;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Scoreboard horizontal compact sur mobile */
+  .panel-block:not(.chatbox-block) {
+    flex-shrink: 0;
+    padding: 6px 10px;
+  }
+
+  .panel-block:not(.chatbox-block) .player-list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 5px;
+    padding-bottom: 2px;
+  }
+
+  .panel-block:not(.chatbox-block) .player-list::-webkit-scrollbar { height: 2px; }
+  .panel-block:not(.chatbox-block) .player-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .panel-block:not(.chatbox-block) .player-entry {
+    flex-shrink: 0;
+    font-size: 0.62rem;
+    padding: 4px 8px;
+  }
+
+  .feedback-overlay {
+    font-size: 2.5rem;
+  }
+
+  .guess-input {
+    font-size: 1rem;
+    padding: 10px 12px;
+  }
+
+  .btn-submit {
+    font-size: 1.2rem;
+    padding: 10px 18px;
+  }
+
+  .login-logo {
+    font-size: 3.5rem;
+    letter-spacing: 5px;
+  }
+
+  .login-desc {
+    font-size: 0.65rem;
+  }
+}

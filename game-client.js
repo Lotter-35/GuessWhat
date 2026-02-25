@@ -175,6 +175,7 @@ socket.on('game:roundStart', (data) => {
 
   document.getElementById('canvas-container').className  = 'canvas-container';
   document.getElementById('feedback-overlay').className  = 'feedback-overlay';
+  document.querySelector('.timer-wrap').style.visibility = 'visible';
 
   // Canvas de chargement
   showCanvasMessage('CHARGEMENT…', '#2a2a3a');
@@ -219,6 +220,7 @@ socket.on('game:roundEnd', (data) => {
   clearInterval(stepTimerInterval);
   document.getElementById('timer-text').textContent = '';
   updateTimerUI(0);
+  document.querySelector('.timer-wrap').style.visibility = 'hidden';
 
   // Met dans l'historique
   addAnswerToHistory(data.answer, data.won, data.winner);
