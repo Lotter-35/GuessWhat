@@ -143,7 +143,7 @@ async function loadRoundsFromAPIs() {
 // PARAMÈTRES DE PIXELISATION
 // ─────────────────────────────────────────────
 const SCHEDULE = [
-  { res:   4, duration:  5 },
+  { res:   4, duration:  1 },
   { res:   8, duration:  7 },
   { res:  16, duration:  9 },
   { res:  32, duration: 11 },

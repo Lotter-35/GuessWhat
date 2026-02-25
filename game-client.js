@@ -451,6 +451,39 @@ function addAnswerToHistory(answer, won, winner) {
   appendToAllHistories(entry);
 }
 
+// ─────────────────────────────────────────────
+// iOS KEYBOARD FIX — visualViewport API
+// Sur iOS Safari, quand le clavier s'ouvre, window.innerHeight ne change pas
+// mais window.visualViewport.height se réduit. On repositionne la bottom-bar
+// pour qu'elle reste collée au-dessus du clavier.
+// ─────────────────────────────────────────────
+(function iosKeyboardFix() {
+  if (!window.visualViewport) return;
+
+  const getBar = () => document.querySelector('.bottom-bar');
+
+  const update = () => {
+    const bar = getBar();
+    if (!bar) return;
+    // Seulement sur mobile (position:fixed appliqué par le CSS media query)
+    if (window.innerWidth > 639) {
+      bar.style.bottom = '';
+      return;
+    }
+    // Décalage entre le bas de innerHeight et le bas du viewport visible
+    const offsetFromBottom =
+      window.innerHeight -
+      window.visualViewport.offsetTop -
+      window.visualViewport.height;
+    bar.style.bottom = Math.max(0, offsetFromBottom) + 'px';
+  };
+
+  window.visualViewport.addEventListener('resize', update);
+  window.visualViewport.addEventListener('scroll', update);
+  window.addEventListener('resize', update);
+  update();
+})();
+
 // Timer UI (le serveur ne gère plus de timer explicite côté client,
 // mais on garde la roue visuelle alimentée par les events de step)
 function updateTimerUI(fraction) {
