@@ -2,7 +2,7 @@
 
 Jeu de devinettes multijoueur en temps réel — devine l'image avant les autres !
 
-🔗 **[Jouer en ligne](https://guesswhat-production-73a2.up.railway.app/)**
+🔗 **[Jouer en ligne](https://guesswhat.up.railway.app/)**
 
 ---
 
