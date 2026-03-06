@@ -47,18 +47,44 @@ function _syncHintButtons(revealedCount) {
 
 // CONNEXION SOCKET.IO
 // ─────────────────────────────────────────────
-const socket = io();
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+});
+
+let _manualLogout = false;
 
 socket.on('connect', () => {
   mySocketId = socket.id;
   console.log('[CLIENT] Connecté :', mySocketId);
+  // Re-rejoindre après reconnexion si on était en jeu
+  if (myPseudo && document.getElementById('app').style.display !== 'none') {
+    socket.emit('player:join', myPseudo);
+  }
 });
 
-socket.on('disconnect', () => {
-  console.log('[CLIENT] Déconnecté du serveur');
-  showCanvasMessage('Connexion perdue…', '#ff3c5a');
+socket.on('disconnect', (reason) => {
+  console.log('[CLIENT] Déconnecté :', reason);
   clearInterval(stepTimerInterval);
   document.querySelector('.timer-wrap').style.visibility = 'hidden';
+  // Si déconnexion volontaire (logout), on ne fait rien
+  if (_manualLogout) { _manualLogout = false; return; }
+  showCanvasMessage('Connexion perdue… reconnexion', '#ff3c5a');
+});
+
+socket.on('reconnect_attempt', (attempt) => {
+  showCanvasMessage(`Reconnexion (${attempt})…`, '#6060a0');
+});
+
+socket.on('reconnect', () => {
+  console.log('[CLIENT] Reconnecté');
+  showCanvasMessage('Reconnecté !', '#00e5ff');
+  setTimeout(() => {
+    const msg = document.getElementById('canvas-message');
+    if (msg) msg.remove();
+  }, 1500);
 });
 
 socket.on('game:error', (data) => {
@@ -71,8 +97,27 @@ socket.on('game:error', (data) => {
 });
 
 // ─────────────────────────────────────────────
-// LOGIN
+// LOGIN / LOGOUT
 // ─────────────────────────────────────────────
+
+// Pré-remplissage au chargement
+(function initLoginUI() {
+  const saved = localStorage.getItem('gw_pseudo');
+  const autoLogin = localStorage.getItem('gw_autologin') === 'true';
+  const input = document.getElementById('pseudo-input');
+  const check = document.getElementById('autologin-check');
+  if (saved) input.value = saved;
+  if (check && autoLogin) check.checked = true;
+  if (autoLogin && saved) {
+    // Bypass l'écran de login directement
+    myPseudo = saved;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    socket.once('connect', () => socket.emit('player:join', saved));
+    if (socket.connected) socket.emit('player:join', saved);
+  }
+})();
+
 function joinGame() {
   const input  = document.getElementById('pseudo-input');
   const pseudo = input.value.trim();
@@ -81,6 +126,10 @@ function joinGame() {
     setTimeout(() => input.classList.remove('error'), 600);
     return;
   }
+  const autoLogin = document.getElementById('autologin-check')?.checked || false;
+  localStorage.setItem('gw_pseudo', pseudo);
+  localStorage.setItem('gw_autologin', autoLogin ? 'true' : 'false');
+
   myPseudo = pseudo;
   socket.emit('player:join', pseudo);
 
@@ -88,6 +137,25 @@ function joinGame() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   setTimeout(() => document.getElementById('guess-input').focus(), 50);
+}
+
+function logout() {
+  _manualLogout = true;
+  localStorage.setItem('gw_autologin', 'false');
+  document.getElementById('autologin-check').checked = false;
+  // Réaffiche le login
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  socket.disconnect();
+  socket.connect();
+  // Reset état
+  myPseudo = '';
+  totalScore = 0;
+  currentRound = 1;
+  roundSolved = false;
+  skipVotedIds.clear();
+  hintVotedIds.clear();
+  setTimeout(() => document.getElementById('pseudo-input').focus(), 50);
 }
 
 // Permettre Entrée sur le champ pseudo

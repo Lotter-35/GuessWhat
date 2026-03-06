@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
   <!-- ══════════════════════════════════════════
        ÉCRAN DE LOGIN
   ══════════════════════════════════════════ -->
@@ -29,6 +28,10 @@
           autofocus
         />
         <button class="btn-login" onclick="joinGame()">REJOINDRE →</button>
+        <label class="autologin-label">
+          <input type="checkbox" id="autologin-check">
+          <span>SE CONNECTER AUTOMATIQUEMENT</span>
+        </label>
       </div>
     </div>
   </div>
@@ -41,6 +44,7 @@
     <!-- Header visible uniquement sur mobile -->
     <div class="mobile-top-bar">
       <div class="logo">GUESS<span>WHAT</span></div>
+      <button class="btn-logout" onclick="logout()" title="Se déconnecter">← QUITTER</button>
     </div>
 
     <!-- Scoreboard visible uniquement sur mobile (entre logo et canvas) -->
@@ -76,6 +80,7 @@
 
       <header>
         <div class="logo">GUESS<span>WHAT</span></div>
+        <button class="btn-logout" onclick="logout()" title="Se déconnecter">← QUITTER</button>
       </header>
 
       <!-- Scoreboard -->
