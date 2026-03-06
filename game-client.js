@@ -57,6 +57,17 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   console.log('[CLIENT] Déconnecté du serveur');
   showCanvasMessage('Connexion perdue…', '#ff3c5a');
+  clearInterval(stepTimerInterval);
+  document.querySelector('.timer-wrap').style.visibility = 'hidden';
+});
+
+socket.on('game:error', (data) => {
+  showCanvasMessage('ERREUR BASE DE DONNÉES', '#ff3c5a');
+  const overlay = document.getElementById('feedback-overlay');
+  if (overlay) {
+    overlay.textContent = data.message || 'Erreur serveur';
+    overlay.className = 'feedback-overlay wrong-msg show';
+  }
 });
 
 // ─────────────────────────────────────────────
@@ -282,7 +293,7 @@ socket.on('game:hintUpdate', (data) => {
     btnHint.disabled = iVoted;
     btnHint.title = `${data.hintIds.length}/${data.total} vote(s) — ${data.needed} nécessaire(s)`;
   }
-  if (data.lastVoterPseudo) addChatNotice(`💡 ${escapeHtml(data.lastVoterPseudo)} veut un indice`, 'hint');
+  if (data.lastVoterPseudo && data.total > 1) addChatNotice(`💡 ${escapeHtml(data.lastVoterPseudo)} veut un indice`, 'hint');
   renderPlayerList(currentPlayers);
 });
 
@@ -428,7 +439,7 @@ socket.on('game:skipUpdate', (data) => {
     btnSkip.disabled = iVoted;
     btnSkip.title = `${data.skipIds.length}/${data.total} vote(s) — ${data.needed} nécessaire(s)`;
   }
-  if (data.lastVoterPseudo) addChatNotice(`⏭ ${escapeHtml(data.lastVoterPseudo)} veut passer`, 'skip');
+  if (data.lastVoterPseudo && data.total > 1) addChatNotice(`⏭ ${escapeHtml(data.lastVoterPseudo)} veut passer`, 'skip');
   renderPlayerList(currentPlayers);
 });
 

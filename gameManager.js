@@ -2,23 +2,7 @@
 
 const sharp                  = require('sharp');
 const fetch                  = require('node-fetch');
-const { loadAllRounds }      = require('./sources');
-
-// ─────────────────────────────────────────────
-// MANCHES DE SECOURS (utilisées si toutes les sources échouent)
-// ─────────────────────────────────────────────
-const FALLBACK_ROUNDS = [
-  {
-    imageUrl: 'https://i0.wp.com/dawtonasarl.com/wp-content/uploads/2025/03/unnamed.jpg?fit=900,900&ssl=1',
-    answers:  ['nutella', 'pâte à tartiner', 'noisette', 'ferrero'],
-    hints:    ['à tartiner', 'chocolat', 'pot']
-  },
-  {
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Rook-Corvus_frugilegus.jpg',
-    answers:  ['corbeau', 'corbeaux', 'rook', 'corvus', 'freux', 'corneille'],
-    hints:    ['oiseau', 'noir', 'passereau']
-  }
-];
+const { loadNextRound }      = require('./sources');
 
 // ─────────────────────────────────────────────
 // PARAMÈTRES DE PIXELISATION
@@ -45,8 +29,8 @@ class GameManager {
   constructor(io) {
     this.io           = io;
     this.players      = new Map();   // socketId → { pseudo, score }
-    this._rounds      = FALLBACK_ROUNDS; // manches chargées dynamiquement (APIs)
-    this.currentRound = 0;           // index dans this._rounds (modulo)
+    this._rounds      = [];  // round courant en tableau (rétrocompat)
+    this.currentRound = 0;
     this.roundNumber  = 1;           // numéro de manche affiché (incrémente à l'infini)
     this.currentStep  = 0;
     this.roundSolved  = false;
@@ -97,7 +81,7 @@ class GameManager {
     // Réévaluer le skip si ce joueur avait voté (le seuil change avec 1 joueur en moins)
     if (hadVoted && !this.roundSolved) {
       const count  = this.players.size;
-      const needed = Math.round(count * 2/3);
+      const needed = Math.ceil(count * 2/3);
       if (this._skipVotes.size >= needed) {
         console.log(`[GAME] Skip validé après déconnexion d'un joueur (${this._skipVotes.size}/${count})`);
         this.io.emit('game:skipAccepted');
@@ -206,10 +190,9 @@ class GameManager {
 
   // ── Manche ──────────────────────────────────
   // attempt : nombre d'essais successifs pour cette manche (évite boucle infinie)
-  async startRound(roundIndex, attempt = 0) {
-    const MAX_SKIP = Math.min(10, this._rounds.length - 1);
+  async startRound(attempt = 0) {
+    const MAX_ATTEMPTS = 10;
 
-    this.currentRound  = roundIndex;
     this.currentStep   = 0;
     this.roundSolved   = false;
     this.roundWinner   = null;
@@ -219,23 +202,33 @@ class GameManager {
     this._roundHints    = [];
     this._clearTimers();
 
-    const round = this._rounds[this.currentRound];
-    console.log(`[GAME] Manche ${this.roundNumber} (image ${this.currentRound + 1}/${this._rounds.length}) : ${round.answers[0]}`);
+    // Si pas de round chargé (premier lancement géré par start()), on en charge un
+    if (!this._rounds[0]) {
+      const r = await loadNextRound();
+      if (!r) {
+        console.error('[GAME] Impossible de charger un round.');
+        this.io.emit('game:error', { message: 'Impossible de se connecter à la base de données. Réessaie dans quelques instants.' });
+        return;
+      }
+      this._rounds = [r];
+    }
+
+    const round = this._rounds[0];
+    console.log(`[GAME] Manche ${this.roundNumber} : ${round.answers[0]}`);
 
     // Charge l'image côté serveur
     try {
       await this._loadImage(round.imageUrl);
     } catch (e) {
-      console.error(`[IMG] Erreur de chargement (essai ${attempt + 1}/${MAX_SKIP + 1}) :`, e.message);
+      console.error(`[IMG] Erreur de chargement (essai ${attempt + 1}/${MAX_ATTEMPTS}) :`, e.message);
 
-      if (attempt < MAX_SKIP) {
-        // Passe silencieusement à l'entrée suivante
-        const next = (roundIndex + 1) % this._rounds.length;
-        console.log(`[IMG] Image ignorée → passage à l'entrée ${next + 1}`);
-        return this.startRound(next, attempt + 1);
+      if (attempt < MAX_ATTEMPTS - 1) {
+        // Charge une autre image aléatoire et réessaie
+        const next = await loadNextRound();
+        if (next) this._rounds = [next];
+        return this.startRound(attempt + 1);
       }
 
-      // Toutes les tentatives épuisées → on lance quand même avec une grille grise
       console.error('[IMG] Impossible de charger une image valide après plusieurs essais. Grille de secours utilisée.');
       this.nativeW = 256; this.nativeH = 256; this.channels = 3;
       this.nativePixels = Buffer.alloc(256 * 256 * 3, 80);
@@ -252,10 +245,8 @@ class GameManager {
     // Stocke les indices disponibles — révélés manuellement via le bouton INDICE
     this._roundHints = round.hints || [];
 
-    // Informe les clients du nombre d'indices disponibles
-    if (this._roundHints.length > 0) {
-      this.io.emit('game:hintsInfo', { total: this._roundHints.length });
-    }
+    // Informe toujours les clients du nombre d'indices (0 compris) pour reset l'état
+    this.io.emit('game:hintsInfo', { total: this._roundHints.length });
   }
 
   _runStep(stepIndex) {
@@ -301,7 +292,7 @@ class GameManager {
     this.roundSolved = true;
     this._clearTimers();
 
-    const round = this._rounds[this.currentRound];
+    const round = this._rounds[0];
     console.log(`[GAME] Timeout — réponse : ${round.answers[0]}`);
 
     this.io.emit('game:roundEnd', {
@@ -320,7 +311,7 @@ class GameManager {
     const player = this.players.get(socketId);
     if (!player) return;
 
-    const round   = this._rounds[this.currentRound];
+    const round   = this._rounds[0];
     const normalize = s => s.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // ignore accents
     const cleaned = normalize(text);
@@ -344,7 +335,7 @@ class GameManager {
     this.roundSolved = true;
     this._clearTimers();
 
-    const round = this._rounds[this.currentRound];
+    const round = this._rounds[0];
 
     // Calcul du score : 100 pts au step 0 (très tôt) → 10 pts au dernier step
     const maxPts = 100;
@@ -379,7 +370,7 @@ class GameManager {
     this._broadcastHintUpdate(socketId);
 
     const count  = this.players.size;
-    const needed = Math.round(count * 2/3);
+    const needed = Math.ceil(count * 2/3);
     if (this._hintVotes.size >= needed) {
       const hint = this._roundHints[nextIdx];
       this._hintVotes = new Set(); // reset votes pour le prochain indice
@@ -394,7 +385,7 @@ class GameManager {
 
   _broadcastHintUpdate(lastVoterId = null) {
     const count  = this.players.size;
-    const needed = Math.round(count * 2/3);
+    const needed = Math.ceil(count * 2/3);
     const lastVoterPseudo = lastVoterId ? (this.players.get(lastVoterId)?.pseudo || null) : null;
     this.io.emit('game:hintUpdate', {
       hintIds: Array.from(this._hintVotes),
@@ -411,7 +402,7 @@ class GameManager {
     this._broadcastSkipUpdate(socketId);
 
     const count  = this.players.size;
-    const needed = Math.round(count * 2/3); // 1→1, 2→1, 3→2, 4→3
+    const needed = Math.ceil(count * 2/3); // 1→1, 2→2, 3→2, 4→3
     if (this._skipVotes.size >= needed) {
       console.log(`[GAME] Skip voté (${this._skipVotes.size}/${count}) → passage à la suite`);
       this.io.emit('game:skipAccepted');
@@ -421,7 +412,7 @@ class GameManager {
 
   _broadcastSkipUpdate(lastVoterId = null) {
     const count  = this.players.size;
-    const needed = Math.round(count * 2/3);
+    const needed = Math.ceil(count * 2/3);
     const lastVoterPseudo = lastVoterId ? (this.players.get(lastVoterId)?.pseudo || null) : null;
     this.io.emit('game:skipUpdate', {
       skipIds: Array.from(this._skipVotes),
@@ -433,18 +424,23 @@ class GameManager {
 
   _scheduleNextRound(delay) {
     this._nextTimer = setTimeout(async () => {
-      // Ne lance pas de nouvelle manche si le lobby est vide
       if (this.players.size === 0) {
         console.log('[GAME] No players — game paused, counters reset.');
-        this.started      = false;
-        this.roundNumber  = 1;
-        this.currentRound = 0;
+        this.started     = false;
+        this.roundNumber = 1;
+        this._rounds     = [];
         return;
       }
-      // Boucle infinie sur les images
-      this.currentRound = (this.currentRound + 1) % this._rounds.length;
+      // Charge une nouvelle image aléatoire
+      const next = await loadNextRound();
+      if (!next) {
+        console.error('[GAME] Impossible de charger l\'image suivante.');
+        this.io.emit('game:error', { message: 'Impossible de se connecter à la base de données.' });
+        return;
+      }
+      this._rounds = [next];
       this.roundNumber++;
-      await this.startRound(this.currentRound);
+      await this.startRound();
     }, delay);
   }
 
@@ -461,11 +457,15 @@ class GameManager {
   async start() {
     if (this.started) return;
     this.started = true;
-    console.log('[SOURCES] Chargement des manches...');
-    const loaded = await loadAllRounds();
-    this._rounds = loaded.length > 0 ? loaded : FALLBACK_ROUNDS;
-    this.currentRound = 0;
-    await this.startRound(this.currentRound);
+    console.log('[SOURCES] Chargement de la première manche...');
+    const round = await loadNextRound();
+    if (!round) {
+      console.error('[SOURCES] Impossible de charger la première manche.');
+      this.io.emit('game:error', { message: 'Impossible de se connecter à la base de données. Réessaie dans quelques instants.' });
+      return;
+    }
+    this._rounds = [round];
+    await this.startRound();
   }
 
   // Retourne l'état courant pour un joueur qui se (re)connecte

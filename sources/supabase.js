@@ -2,38 +2,60 @@
 
 /**
  * SOURCE : Supabase — table `images`
- * Lit toutes les images actives et leurs indices depuis la BDD.
- * Format retourné : { imageUrl, answers: string[], hints: string[] }
+ * Charge une image aléatoire via COUNT puis SELECT par offset.
+ * Format retourné : { imageUrl, answers: string[], hints: string[] } | null
  */
 
 const supabase = require('../lib/supabase');
 
-module.exports = async function loadFromSupabase() {
+async function loadRandomRound() {
   if (!supabase) {
-    console.warn('[SOURCE supabase] Client non initialisé — source ignorée');
-    return [];
+    console.warn('[SOURCE supabase] Client non initialisé');
+    return null;
   }
 
-  // Charge les images actives avec leurs indices via la table de jointure
+  // 1. COUNT des images actives
+  console.log('[DB] → COUNT images WHERE active = true');
+  const { count, error: countErr } = await supabase
+    .from('images')
+    .select('*', { count: 'exact', head: true })
+    .eq('active', true);
+
+  if (countErr) {
+    console.error('[DB] ✗ COUNT échoué :', countErr.message);
+    return null;
+  }
+  if (!count || count === 0) {
+    console.warn('[DB] ✗ Aucune image active en BDD');
+    return null;
+  }
+  console.log(`[DB] ✓ COUNT = ${count}`);
+
+  // 2. SELECT d'une image à un offset aléatoire
+  const offset = Math.floor(Math.random() * count);
+  console.log(`[DB] → SELECT image à l'offset ${offset + 1}/${count}`);
   const { data, error } = await supabase
     .from('images')
     .select('name, url, aliases, image_hints(hints(label))')
-    .eq('active', true);
+    .eq('active', true)
+    .range(offset, offset)
+    .single();
 
-  if (error) {
-    console.error('[SOURCE supabase] Erreur lecture :', error.message);
-    return [];
+  if (error || !data) {
+    console.error('[DB] ✗ SELECT échoué :', error?.message);
+    return null;
   }
 
-  const rounds = (data || []).map(row => {
-    const answers = [row.name, ...(row.aliases || [])].filter(Boolean);
-    const hints   = (row.image_hints || [])
-      .map(ih => ih.hints?.label)
-      .filter(Boolean);
+  const answers = [data.name, ...(data.aliases || [])].filter(Boolean);
+  const hints   = (data.image_hints || []).map(ih => ih.hints?.label).filter(Boolean);
 
-    return { imageUrl: row.url, answers, hints };
-  }).filter(r => r.imageUrl && r.answers.length > 0);
+  if (!data.url || answers.length === 0) {
+    console.warn('[DB] ✗ Données invalides pour cette image (pas d\'URL ou pas de réponse)');
+    return null;
+  }
 
-  console.log(`[SOURCE supabase] ${rounds.length} image(s) chargée(s) depuis la BDD`);
-  return rounds;
-};
+  console.log(`[DB] ✓ Image chargée : "${answers[0]}" | ${hints.length} indice(s) | offset ${offset + 1}/${count}`);
+  return { imageUrl: data.url, answers, hints };
+}
+
+module.exports = loadRandomRound;

@@ -11,44 +11,19 @@
  * ═══════════════════════════════════════════════════════════
  */
 
-const dbSource = require('./supabase');
-// ↓ Ajoute tes nouvelles sources ici ↓
-// const anime  = require('./anime');
-// const flags  = require('./flags');
-
-const SOURCES = [
-  dbSource,
-  // anime,
-  // flags,
-];
-
-/** Mélange un tableau en place (Fisher-Yates). */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
+const loadRandomRound = require('./supabase');
 
 /**
- * Charge toutes les sources en parallèle et retourne un tableau
- * fusionné et mélangé de manches.
- * Si une source échoue, elle est ignorée sans bloquer les autres.
+ * Charge une manche aléatoire depuis la BDD.
+ * Retourne { imageUrl, answers, hints } ou null en cas d'échec.
  */
-async function loadAllRounds() {
-  const results = await Promise.all(
-    SOURCES.map(fn =>
-      fn().catch(e => {
-        console.error('[SOURCES] Erreur sur une source :', e.message);
-        return [];
-      })
-    )
-  );
-
-  const all = results.flat();
-  console.log(`[SOURCES] Total : ${all.length} manches chargées depuis ${SOURCES.length} source(s)`);
-  return shuffle(all);
+async function loadNextRound() {
+  try {
+    return await loadRandomRound();
+  } catch (e) {
+    console.error('[SOURCES] Erreur lors du chargement aléatoire :', e.message);
+    return null;
+  }
 }
 
-module.exports = { loadAllRounds };
+module.exports = { loadNextRound };
