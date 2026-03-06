@@ -1,5 +1,7 @@
 'use strict';
 
+require('dotenv').config();
+
 const express     = require('express');
 const http        = require('http');
 const { Server }  = require('socket.io');
@@ -70,6 +72,11 @@ io.on('connection', (socket) => {
   // ── Vote Skip ────────────────────────────────
   socket.on('player:skip', () => {
     game.handleSkip(socket.id);
+  });
+
+  // ── Indice ───────────────────────────────────
+  socket.on('player:hint', () => {
+    game.handleHint(socket.id);
   });
 
   // ── Déconnexion ──────────────────────────────

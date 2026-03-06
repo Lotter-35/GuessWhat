@@ -309,6 +309,39 @@ header {
   white-space: nowrap;
 }
 
+/* Notice système (vote hint/skip) */
+.chat-notice {
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.55);
+  padding: 3px 6px;
+  font-style: italic;
+  border-left: 2px solid rgba(255,255,255,0.2);
+  margin: 2px 0;
+}
+.chat-notice--hint {
+  color: rgba(255,215,0,0.7);
+  border-left-color: rgba(255,215,0,0.4);
+}
+.chat-notice--hint-reveal {
+  color: var(--gold);
+  border-left-color: var(--gold);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.chat-notice--skip {
+  color: rgba(0,229,255,0.6);
+  border-left-color: rgba(0,229,255,0.3);
+}
+.chat-notice--skip-accepted {
+  color: var(--accent2);
+  border-left-color: var(--accent2);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
 /* Réponse révélée dans le chat */
 .answer-text-history {
   color: var(--accent2) !important;
@@ -333,27 +366,30 @@ header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 6px 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
-.hint-block__value {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 0.7rem;
+.hint-pill {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
   letter-spacing: 2px;
+  text-transform: uppercase;
   color: var(--gold);
-  border: 1.5px solid var(--gold);
+  border: 1px solid rgba(255,215,0,0.45);
   border-radius: 999px;
-  padding: 2px 12px;
-  box-shadow: 0 0 8px rgba(255,215,0,0.2);
+  padding: 3px 12px;
+  background: rgba(255,215,0,0.07);
+  box-shadow: 0 0 10px rgba(255,215,0,0.15);
+  white-space: nowrap;
+  animation: hint-reveal 0.35s ease forwards;
 }
 
 @keyframes hint-reveal {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-.hint-block--reveal {
-  animation: hint-reveal 0.4s ease forwards;
 }
 
 /* ── INPUT ── */
@@ -414,6 +450,44 @@ header {
 .btn-submit:active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 #7a0020;
+}
+
+.btn-hint {
+  position: relative;
+  background: transparent;
+  border: 1px solid rgba(255,215,0,0.4);
+  border-radius: 3px;
+  color: var(--gold);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 2.5px;
+  padding: 7px 14px;
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.btn-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,215,0,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+.btn-hint:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: rgba(255,215,0,0.08);
+  box-shadow: 0 0 12px rgba(255,215,0,0.2);
+}
+.btn-hint.voted,
+.btn-hint:disabled {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(255,215,0,0.12);
+  cursor: default;
+  opacity: 0.8;
 }
 
 .btn-skip {
@@ -809,6 +883,11 @@ canvas {
     letter-spacing: 1px;
     box-shadow: 0 2px 0 #7a0020;
   }
+  .btn-hint {
+    font-size: 9px;
+    padding: 5px 8px;
+    letter-spacing: 1px;
+  }
   .btn-skip {
     font-size: 10px;
     padding: 5px 8px;
@@ -833,6 +912,7 @@ canvas {
     right: 0;
     z-index: 199;
     padding: 5px 10px;
+    gap: 6px;
     border-top: 1px solid var(--border);
     border-bottom: none;
     background: var(--bg);

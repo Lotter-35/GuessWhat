@@ -89,10 +89,8 @@
         <div class="guess-history" id="guess-history"></div>
       </div>
 
-      <!-- Indice -->
-      <div class="hint-block" id="hint-block" style="display:none">
-        <span class="hint-block__value" id="hint-bar-value"></span>
-      </div>
+      <!-- Indices -->
+      <div class="hint-block" id="hint-block" style="display:none"></div>
 
       <!-- Barre basse -->
       <div class="bottom-bar">
@@ -109,7 +107,8 @@
             spellcheck="false"
           />
           <button class="btn-submit" onclick="submitGuess()">OK</button>
-          <button class="btn-skip" id="btn-skip" onclick="submitSkip()" title="Voter pour passer cette manche">⏭</button>
+          <button class="btn-hint" id="btn-hint" onclick="submitHint()" style="display:none">HINT</button>
+          <button class="btn-skip" id="btn-skip" onclick="submitSkip()" title="Voter pour passer cette manche" style="display:none">⏭</button>
         </div>
       </div>
 

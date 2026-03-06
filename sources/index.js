@@ -11,15 +11,13 @@
  * ═══════════════════════════════════════════════════════════
  */
 
-const movies  = require('./movies');
-const pokemon = require('./pokemon');
+const dbSource = require('./supabase');
 // ↓ Ajoute tes nouvelles sources ici ↓
 // const anime  = require('./anime');
 // const flags  = require('./flags');
 
 const SOURCES = [
-  movies,
-  pokemon,
+  dbSource,
   // anime,
   // flags,
 ];

@@ -30,6 +30,21 @@ let roundEndImg    = null;
 let stepTimerInterval = null;  // timer local pour le cercle
 let currentPlayers    = [];    // liste joueurs courante (pour re-render au skip)
 let skipVotedIds      = new Set(); // IDs ayant voté skip cette manche
+let hintVotedIds      = new Set(); // IDs ayant voté hint cette manche
+// ─────────────────────────────────────────────
+// ÉTAT HINTS
+// ─────────────────────────────────────────────
+let hintsTotal = 0;
+
+function _syncHintButtons(revealedCount) {
+  const btnHint = document.getElementById('btn-hint');
+  const btnSkip = document.getElementById('btn-skip');
+  if (!btnHint || !btnSkip) return;
+  const allRevealed = revealedCount >= hintsTotal;
+  btnHint.style.display = (hintsTotal > 0 && !allRevealed) ? '' : 'none';
+  btnSkip.style.display = allRevealed ? '' : 'none';
+}
+
 // CONNEXION SOCKET.IO
 // ─────────────────────────────────────────────
 const socket = io();
@@ -70,16 +85,14 @@ document.getElementById('pseudo-input').addEventListener('keydown', e => {
 });
 
 // Helper : affiche ou masque le bloc d'indice
-function showHint(text) {
+function showHints(list) {
   const block = document.getElementById('hint-block');
-  const val   = document.getElementById('hint-bar-value');
-  if (!block || !val) return;
-  if (text) {
-    val.textContent = text.toUpperCase();
+  if (!block) return;
+  if (list && list.length > 0) {
+    block.innerHTML = list.map((h, i) =>
+      `<span class="hint-pill" style="animation-delay:${i * 80}ms">${escapeHtml(h.toUpperCase())}</span>`
+    ).join('');
     block.style.display = 'flex';
-    block.classList.remove('hint-block--reveal');
-    void block.offsetWidth;
-    block.classList.add('hint-block--reveal');
     // Recale la position par rapport à la bottom-bar (surtout sur iOS)
     const bar = document.querySelector('.bottom-bar');
     if (bar && window.innerWidth <= 639) {
@@ -88,7 +101,7 @@ function showHint(text) {
     }
   } else {
     block.style.display = 'none';
-    val.textContent = '';
+    block.innerHTML = '';
   }
 }
 
@@ -113,8 +126,16 @@ socket.on('game:sync', (state) => {
   updatePixelInfo(currentStep);
   renderPlayerList(state.players || []);
 
-  // Indice déjà révélé avant la connexion
-  showHint(state.hintRevealed || null);
+  // Indices déjà révélés avant la connexion
+  hintsTotal = state.hintsTotal || 0;
+  hintVotedIds = new Set(state.hintIds || []);
+  showHints(state.hintsRevealed || []);
+  _syncHintButtons((state.hintsRevealed || []).length);
+  const btnHintSync = document.getElementById('btn-hint');
+  if (btnHintSync && hintVotedIds.has(mySocketId)) {
+    btnHintSync.classList.add('voted');
+    btnHintSync.disabled = true;
+  }
 
   // Timer late-joiner : recalcule la position correcte dans les ~60s
   if (state.started && !state.roundSolved && state.stepStartedAt && state.totalRemainingAtStart > 0) {
@@ -208,8 +229,13 @@ socket.on('game:roundStart', (data) => {
   input.className = 'guess-input';
   input.focus();
 
-  // Masque l'indice au début de chaque manche (révélé après 30s via game:hint)
-  showHint(null);
+  // Masque les indices au début de chaque manche
+  showHints([]);
+  hintsTotal = 0;
+  hintVotedIds = new Set();
+  _syncHintButtons(0);
+  const btnHintReset = document.getElementById('btn-hint');
+  if (btnHintReset) { btnHintReset.classList.remove('voted'); btnHintReset.disabled = false; }
 
   document.getElementById('canvas-container').className  = 'canvas-container';
   document.getElementById('feedback-overlay').className  = 'feedback-overlay';
@@ -218,7 +244,7 @@ socket.on('game:roundStart', (data) => {
   // Reset skip
   skipVotedIds = new Set();
   const btnSkip = document.getElementById('btn-skip');
-  if (btnSkip) { btnSkip.classList.remove('voted'); btnSkip.disabled = false; }
+  if (btnSkip) { btnSkip.classList.remove('voted'); btnSkip.disabled = false; btnSkip.style.display = 'none'; }
   renderPlayerList(currentPlayers);
 
   // Canvas de chargement
@@ -240,10 +266,45 @@ socket.on('game:roundStart', (data) => {
 });
 
 // ─────────────────────────────────────────────
-// ÉVÉNEMENT : INDICE (révélé après 30s)
+// ÉVÉNEMENT : INFO HINTS (début de manche)
+// ─────────────────────────────────────────────
+socket.on('game:hintsInfo', (data) => {
+  hintsTotal = data.total || 0;
+  _syncHintButtons(0);
+});
+
+socket.on('game:hintUpdate', (data) => {
+  hintVotedIds = new Set(data.hintIds);
+  const btnHint = document.getElementById('btn-hint');
+  if (btnHint) {
+    const iVoted = hintVotedIds.has(mySocketId);
+    btnHint.classList.toggle('voted', iVoted);
+    btnHint.disabled = iVoted;
+    btnHint.title = `${data.hintIds.length}/${data.total} vote(s) — ${data.needed} nécessaire(s)`;
+  }
+  if (data.lastVoterPseudo) addChatNotice(`💡 ${escapeHtml(data.lastVoterPseudo)} veut un indice`, 'hint');
+  renderPlayerList(currentPlayers);
+});
+
+// ─────────────────────────────────────────────
+// ÉVÉNEMENT : INDICE révélé
 // ─────────────────────────────────────────────
 socket.on('game:hint', (data) => {
-  showHint(data.hint || null);
+  const hints = data.hints || [];
+  showHints(hints);
+  // Annonce l'indice révélé dans le chat
+  const lastHint = hints[hints.length - 1];
+  if (lastHint) addChatNotice(`💡 INDICE : ${escapeHtml(lastHint.toUpperCase())}`, 'hint-reveal');
+  // Reset état voté (nouvel indice disponible)
+  hintVotedIds = new Set();
+  const btnHint = document.getElementById('btn-hint');
+  if (btnHint) { btnHint.classList.remove('voted'); btnHint.disabled = false; }
+  _syncHintButtons(hints.length);
+  renderPlayerList(currentPlayers);
+});
+
+socket.on('game:skipAccepted', () => {
+  addChatNotice('⏭ SKIP ACCEPTÉ', 'skip-accepted');
 });
 
 // ─────────────────────────────────────────────
@@ -293,9 +354,11 @@ socket.on('game:roundEnd', (data) => {
 
   document.getElementById('guess-input').disabled = true;
 
-  // Masque + désactive le skip
+  // Masque + désactive le skip et le hint
+  const btnHint = document.getElementById('btn-hint');
+  if (btnHint) btnHint.style.display = 'none';
   const btnSkip = document.getElementById('btn-skip');
-  if (btnSkip) { btnSkip.disabled = true; btnSkip.classList.remove('voted'); }
+  if (btnSkip) { btnSkip.disabled = true; btnSkip.classList.remove('voted'); btnSkip.style.display = 'none'; }
 
   // Points si on a gagné
   if (myWin && data.points) {
@@ -365,6 +428,7 @@ socket.on('game:skipUpdate', (data) => {
     btnSkip.disabled = iVoted;
     btnSkip.title = `${data.skipIds.length}/${data.total} vote(s) — ${data.needed} nécessaire(s)`;
   }
+  if (data.lastVoterPseudo) addChatNotice(`⏭ ${escapeHtml(data.lastVoterPseudo)} veut passer`, 'skip');
   renderPlayerList(currentPlayers);
 });
 
@@ -378,6 +442,11 @@ function submitGuess() {
   if (!text) return;
   socket.emit('player:guess', text);
   input.value = '';
+}
+
+function submitHint() {
+  if (roundSolved) return;
+  socket.emit('player:hint');
 }
 
 function submitSkip() {
@@ -426,7 +495,7 @@ function renderPlayerList(players) {
     .map(p => `
       <div class="player-entry ${p.id === mySocketId ? 'me' : ''}">
         <span class="player-pseudo">${escapeHtml(p.pseudo)}</span>
-        <span class="player-skip-wrap">${skipVotedIds.has(p.id) ? '⏭' : ''}</span>
+        <span class="player-skip-wrap">${hintVotedIds.has(p.id) ? '💡' : skipVotedIds.has(p.id) ? '⏭' : ''}</span>
         <span class="player-score-box">${p.score}</span>
       </div>
     `).join('');
@@ -439,6 +508,13 @@ function renderPlayerList(players) {
 
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addChatNotice(text, modifier = '') {
+  const el = document.createElement('div');
+  el.className = 'chat-notice' + (modifier ? ' chat-notice--' + modifier : '');
+  el.textContent = text;
+  appendToAllHistories(el);
 }
 
 function appendToAllHistories(el) {

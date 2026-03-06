@@ -55,6 +55,9 @@ class GameManager {
     this._stepStartedAt          = null;   // timestamp du début de l'étape courante
     this._totalRemainingAtStart  = 0;      // secondes restantes au début de l'étape courante
     this._skipVotes              = new Set(); // socketIds ayant voté skip
+    this._hintVotes              = new Set(); // socketIds ayant voté hint
+    this._hintsRevealed          = [];        // indices révélés dans la manche courante
+    this._roundHints             = [];        // tous les indices de la manche courante
 
     // Pixels natifs (chargés en mémoire, jamais envoyés)
     this.nativePixels = null;
@@ -71,7 +74,6 @@ class GameManager {
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
-    this._hintTimer    = null;
   }
 
   // ── Joueurs ─────────────────────────────────
@@ -95,9 +97,10 @@ class GameManager {
     // Réévaluer le skip si ce joueur avait voté (le seuil change avec 1 joueur en moins)
     if (hadVoted && !this.roundSolved) {
       const count  = this.players.size;
-      const needed = Math.floor(count / 2) + 1;
+      const needed = Math.round(count * 2/3);
       if (this._skipVotes.size >= needed) {
         console.log(`[GAME] Skip validé après déconnexion d'un joueur (${this._skipVotes.size}/${count})`);
+        this.io.emit('game:skipAccepted');
         this._handleTimeout();
       } else {
         this._broadcastSkipUpdate();
@@ -211,7 +214,9 @@ class GameManager {
     this.roundSolved   = false;
     this.roundWinner   = null;
     this._skipVotes    = new Set();
-    this._hintRevealed = null;
+    this._hintVotes    = new Set();
+    this._hintsRevealed = [];
+    this._roundHints    = [];
     this._clearTimers();
 
     const round = this._rounds[this.currentRound];
@@ -244,16 +249,12 @@ class GameManager {
 
     this._runStep(0);
 
-    // Révèle l'indice de source à tous les joueurs après 10s
-    const _hint = round.hints?.[0];
-    if (_hint) {
-      this._hintTimer = setTimeout(() => {
-        if (!this.roundSolved) {
-          console.log(`[GAME] Indice révélé : ${_hint}`);
-          this._hintRevealed = _hint;
-          this.io.emit('game:hint', { hint: _hint });
-        }
-      }, 10000);
+    // Stocke les indices disponibles — révélés manuellement via le bouton INDICE
+    this._roundHints = round.hints || [];
+
+    // Informe les clients du nombre d'indices disponibles
+    if (this._roundHints.length > 0) {
+      this.io.emit('game:hintsInfo', { total: this._roundHints.length });
     }
   }
 
@@ -368,27 +369,65 @@ class GameManager {
     this._scheduleNextRound(3000);
   }
 
+  // ── Bouton Hint ─────────────────────────────────
+  handleHint(socketId) {
+    if (this.roundSolved || !this.players.has(socketId)) return;
+    const nextIdx = this._hintsRevealed.length;
+    if (nextIdx >= this._roundHints.length) return;
+
+    this._hintVotes.add(socketId);
+    this._broadcastHintUpdate(socketId);
+
+    const count  = this.players.size;
+    const needed = Math.round(count * 2/3);
+    if (this._hintVotes.size >= needed) {
+      const hint = this._roundHints[nextIdx];
+      this._hintVotes = new Set(); // reset votes pour le prochain indice
+      this._hintsRevealed.push(hint);
+      console.log(`[GAME] Hint ${nextIdx + 1}/${this._roundHints.length} révélé : ${hint}`);
+      this.io.emit('game:hint', {
+        hints: [...this._hintsRevealed],
+        total: this._roundHints.length
+      });
+    }
+  }
+
+  _broadcastHintUpdate(lastVoterId = null) {
+    const count  = this.players.size;
+    const needed = Math.round(count * 2/3);
+    const lastVoterPseudo = lastVoterId ? (this.players.get(lastVoterId)?.pseudo || null) : null;
+    this.io.emit('game:hintUpdate', {
+      hintIds: Array.from(this._hintVotes),
+      needed,
+      total: count,
+      lastVoterPseudo
+    });
+  }
+
   // ── Vote Skip ─────────────────────────────────
   handleSkip(socketId) {
     if (this.roundSolved || !this.players.has(socketId)) return;
     this._skipVotes.add(socketId);
-    this._broadcastSkipUpdate();
+    this._broadcastSkipUpdate(socketId);
 
     const count  = this.players.size;
-    const needed = Math.floor(count / 2) + 1; // majorité stricte
+    const needed = Math.round(count * 2/3); // 1→1, 2→1, 3→2, 4→3
     if (this._skipVotes.size >= needed) {
       console.log(`[GAME] Skip voté (${this._skipVotes.size}/${count}) → passage à la suite`);
+      this.io.emit('game:skipAccepted');
       this._handleTimeout();
     }
   }
 
-  _broadcastSkipUpdate() {
+  _broadcastSkipUpdate(lastVoterId = null) {
     const count  = this.players.size;
-    const needed = Math.floor(count / 2) + 1;
+    const needed = Math.round(count * 2/3);
+    const lastVoterPseudo = lastVoterId ? (this.players.get(lastVoterId)?.pseudo || null) : null;
     this.io.emit('game:skipUpdate', {
       skipIds: Array.from(this._skipVotes),
       needed,
-      total: count
+      total: count,
+      lastVoterPseudo
     });
   }
 
@@ -413,11 +452,9 @@ class GameManager {
     clearTimeout(this._stepTimer);
     clearInterval(this._shimmerTimer);
     clearTimeout(this._nextTimer);
-    clearTimeout(this._hintTimer);
     this._stepTimer    = null;
     this._shimmerTimer = null;
     this._nextTimer    = null;
-    this._hintTimer    = null;
   }
 
   // Démarre dès le lancement du serveur, sans attendre de joueurs
@@ -440,7 +477,9 @@ class GameManager {
       stepStartedAt:         this._stepStartedAt,
       totalRemainingAtStart: this._totalRemainingAtStart,
       skipIds:               Array.from(this._skipVotes),
-      hintRevealed:          this._hintRevealed,
+      hintIds:               Array.from(this._hintVotes),
+      hintsRevealed:         [...this._hintsRevealed],
+      hintsTotal:            this._roundHints.length,
       players:      Array.from(this.players.entries()).map(([id, p]) => ({
         id, pseudo: p.pseudo, score: p.score
       })),
