@@ -337,10 +337,7 @@ class GameManager {
 
     const round = this._rounds[0];
 
-    // Calcul du score : 100 pts au step 0 (très tôt) → 10 pts au dernier step
-    const maxPts = 100;
-    const minPts = 10;
-    const points = Math.round(maxPts - this.currentStep * (maxPts - minPts) / (SCHEDULE.length - 1));
+    const points = 1;
 
     player.score += points;
     this.players.set(socketId, player);
